@@ -1,9 +1,9 @@
 #include "global.cpp"
 #include "core.cpp"
-#include "chunk.cpp"
 #include <unordered_map>
 #include <chrono>
 #include <iostream>
+#include <thread>
 
 time_t get_time() {
     return std::chrono::steady_clock::now().time_since_epoch().count();
@@ -42,28 +42,24 @@ void main() {
 } 
 )""";
 
-std::unordered_map<GLuint, bool> keymap = {
-    {GLFW_KEY_W, false},
-    {GLFW_KEY_A, false},
-    {GLFW_KEY_S, false},
-    {GLFW_KEY_D, false}
-};
-
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
     if(action == GLFW_PRESS) {
-        if(keymap.contains(key)) {
-            keymap[key] = true;
+        if(core.keymap.contains(key)) {
+            core.keymap[key] = true;
         }
     } else if(action == GLFW_RELEASE) {
-        if(keymap.contains(key)) {
-            keymap[key] = false;
+        if(core.keymap.contains(key)) {
+            core.keymap[key] = false;
         }
     }
 }
 
 int main() {
+    bool game_running = true;
+    int width = 800, height = 600, scale = 32;
+
     stbi_set_flip_vertically_on_load(true);
-    int width = 800, height = 600, scale = 48;
     // init glfw
     if(glfwInit() == GLFW_FALSE) {
         std::cout << "ERROR: GLFW failed to load.\n";
@@ -94,13 +90,9 @@ int main() {
     // set callbacks
     glfwSetKeyCallback(window, key_callback);
 
-    // load chunk
-    siv::PerlinNoise noise(0x1000);
-    Chunk* chunk = Chunk::generate_chunk(noise, {0, 0});
-    chunk->generate_mesh();
-    chunk->buffer.set_attrib(0, 3, 7 * sizeof(float), 0);
-    chunk->buffer.set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
-    chunk->buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
+    // core
+    Core core(glm::dvec2{0, 0}, game_running, width, height, scale);
+    glfwSetWindowUserPointer(window, (void*)&core);
 
     // load texture
     Texture texture;
@@ -110,13 +102,10 @@ int main() {
     Shader shader;
     shader.compile(vertex_shader_source, fragment_shader_source);
 
-    // create camera
-    Camera camera({0.0, 0.0});
-
     time_t last_time = get_time();
-    unsigned int delta_time;
+    uint32_t delta_time;
 
-    while(!glfwWindowShouldClose(window)) {
+    while(game_running) {
         glfwGetFramebufferSize(window, &width, &height);
         glViewport(0, 0, width, height);
 
@@ -127,20 +116,7 @@ int main() {
         delta_time = current_time - last_time;
         last_time = current_time;
 
-        double move_dist = 0.000000005 * delta_time;
-        if(keymap[GLFW_KEY_W]) {
-            camera.pos.y += move_dist;
-        }
-        if(keymap[GLFW_KEY_A]) {
-            camera.pos.x -= move_dist;
-        }
-        if(keymap[GLFW_KEY_S]) {
-            camera.pos.y -= move_dist;
-        }
-        if(keymap[GLFW_KEY_D]) {
-            camera.pos.x += move_dist;
-        }
-        //std::cout << camera.pos.x << " " << camera.pos.y << "\n";
+        core.math(delta_time);
 
         //render
         glClearColor(0.2, 0.3, 0.3, 1.0);
@@ -148,24 +124,38 @@ int main() {
 
         //get matrix
         glm::mat4 pv_matrix = glm::ortho(-float(width / 2) / scale, float(width / 2) / scale, -float(height / 2) / scale, float(height / 2) / scale, 0.0f, 16.0f);
-        pv_matrix *= camera.get_view_matrix();
+        pv_matrix *= core.camera.get_view_matrix();
 
         // draw
         shader.use();
         texture.bind();
-        chunk->buffer.bind();
+        for(uint64_t& key : core.active_chunks) {
+            if(core.loaded_chunks.contains(key)) {
+                Chunk& chunk = core.loaded_chunks[key];
+                // chunk vertices are in buffer
+                if(chunk.vertex_status == 2) { 
+                    chunk.buffer.bind();
 
-        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, chunk->vertex_count);
+                    glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
+                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+                // if vertices have been generated but not loaded
+                } else if(chunk.vertex_status == 1) {
+                    chunk.load_mesh();
+                // if vertices haven't been generated
+                } else if(chunk.vertex_status == 0) {
+                    chunk.vertex_status = 3; // stops the key from being inserted into the queue more that once
+                    core.chunk_update_queue.push(key);
+                }
+            }
+        }
 
         glfwSwapBuffers(window);
+
+        game_running = !glfwWindowShouldClose(window);
     }
 
     glfwTerminate();
     std::cout << "Successfuly terminated!\n";
-
-    // free memory
-    delete(chunk);
 
     return 0;
 }

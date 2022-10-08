@@ -25,8 +25,14 @@ struct Vertex {
 struct Buffer {
     GLuint vertex_array;
     GLuint vertex_buffer;
+    bool initialized = false;
 
     void init() {
+        if(initialized == true) {
+            glDeleteBuffers(1, &vertex_buffer);
+            glDeleteBuffers(1, &vertex_array);
+        } else initialized = true;
+
         glGenVertexArrays(1, &vertex_array);
         glBindVertexArray(vertex_array);
 
@@ -45,6 +51,11 @@ struct Buffer {
 
     void bind() {
         glBindVertexArray(vertex_array);
+    }
+
+    ~Buffer() {
+        glDeleteBuffers(1, &vertex_buffer);
+        glDeleteBuffers(1, &vertex_array);
     }
 };
 

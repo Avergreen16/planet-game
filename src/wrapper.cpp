@@ -128,7 +128,9 @@ struct Texture {
         }
     }
 
-    void bind() {
+    void bind(int tex_id, int uniform) {
+        glActiveTexture(GL_TEXTURE0 + tex_id);
         glBindTexture(GL_TEXTURE_2D, id);
+        glUniform1i(uniform, tex_id);
     }
 };

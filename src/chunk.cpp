@@ -70,7 +70,7 @@ struct Chunk {
     void render(Shader& shader, Texture& texture) {
         shader.use();
         buffer.bind();
-        texture.bind();
+        texture.bind(0, 1);
         glDrawArrays(GL_TRIANGLES, 0, vertex_count);
     }
 };

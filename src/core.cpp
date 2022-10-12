@@ -18,8 +18,51 @@ struct Camera {
     }
 };
 
+std::array<Vertex, 6> player_vertices = {
+    Vertex{{-1, 0, 0}, {0, 0}, {32, 32}},
+    Vertex{{1, 0, 0}, {32, 0}, {32, 32}},
+    Vertex{{-1, 2, 0}, {0, 32}, {32, 32}},
+    Vertex{{-1, 2, 0}, {0, 32}, {32, 32}},
+    Vertex{{1, 0, 0}, {32, 0}, {32, 32}},
+    Vertex{{1, 2, 0}, {32, 32}, {32, 32}}
+};
+
+struct Player {
+    glm::dvec2 position;
+    glm::ivec2 active_texture = glm::ivec2(0, 0);
+    Texture texture;
+    Buffer buffer;
+    
+    Player() = default;
+    
+    void init(glm::dvec2 pos, Texture& tex) {
+        this->position = pos;
+        this->texture = tex;
+
+        buffer.init();
+        buffer.set_data(player_vertices.data(), 6 * sizeof(Vertex));
+        buffer.set_attrib(0, 3, 7 * sizeof(float), 0);
+        buffer.set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
+        buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
+    }
+
+    void render(Shader shader, glm::mat4& pv_mat) {
+        glm::mat4 transform = glm::translate(glm::vec3(position, 0));
+
+        shader.use();
+        texture.bind(0, 2);
+
+        buffer.bind();
+        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat[0][0]);
+        glUniformMatrix4fv(1, 1, GL_FALSE, &transform[0][0]);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+};
+
 struct Core {
     Camera camera;
+    Player player;
     std::unordered_map<uint64_t, Chunk> loaded_chunks;
     std::vector<uint64_t> active_chunks;
     std::queue<uint64_t> chunk_update_queue;
@@ -35,14 +78,25 @@ struct Core {
         {GLFW_KEY_D, false}
     };
 
+    std::array<Texture, 2> textures;
+
     int& screen_width;
     int& screen_height;
     int& scale;
     
     bool& game_running;
 
-    Core(glm::dvec2 camera_pos, bool& game_running, int& width, int& height, int& scale) : game_running(game_running), screen_width(width), screen_height(height), scale(scale) {
+    Core(bool& game_running, int& width, int& height, int& scale) : game_running(game_running), screen_width(width), screen_height(height), scale(scale) {};
+
+    void create_textures(std::array<const char*, 2>& input) {
+        for(int i = 0; i < input.size(); ++i) {
+            textures[i].load(input[i]);
+        }
+    }
+
+    void init(glm::dvec2 camera_pos) {
         this->camera.pos = camera_pos;
+        player.init(camera_pos, textures[1]);
 
         // checks if the player moves between chunks, and if so, generates a new vector of chunk ids that corresponds to the player's new
         // location, so the player will always have chunks filling up their screen.
@@ -104,7 +158,7 @@ struct Core {
         if(!(move_vec.x == 0.0 && move_vec.y == 0.0)) camera.pos += glm::normalize(move_vec) * move_dist;
     }
 
-    void render() {
+    //void render() {
 
-    }
+    //}
 };

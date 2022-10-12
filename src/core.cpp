@@ -19,21 +19,27 @@ struct Camera {
 };
 
 std::array<Vertex, 6> player_vertices = {
-    Vertex{{-1, 0, 0}, {0, 0}, {32, 32}},
-    Vertex{{1, 0, 0}, {32, 0}, {32, 32}},
-    Vertex{{-1, 2, 0}, {0, 32}, {32, 32}},
-    Vertex{{-1, 2, 0}, {0, 32}, {32, 32}},
-    Vertex{{1, 0, 0}, {32, 0}, {32, 32}},
-    Vertex{{1, 2, 0}, {32, 32}, {32, 32}}
+    Vertex{{-1, 0, 0}, {0, 0}, {31, 31}},
+    Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
+    Vertex{{-1, 2, 0}, {0, 32}, {31, 31}},
+    Vertex{{-1, 2, 0}, {0, 32}, {31, 31}},
+    Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
+    Vertex{{1, 2, 0}, {32, 32}, {31, 31}}
 };
+
+enum direction:uint16_t {NORTH, EAST, SOUTH, WEST};
+
+struct Core;
 
 struct Player {
     glm::dvec2 position;
     glm::ivec2 active_texture = glm::ivec2(0, 0);
     Texture texture;
     Buffer buffer;
-    
-    Player() = default;
+
+    direction dir_facing = SOUTH;
+
+    double frame_timer = 0.0;
     
     void init(glm::dvec2 pos, Texture& tex) {
         this->position = pos;
@@ -46,15 +52,18 @@ struct Player {
         buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
     }
 
+    void tick(Core& core, uint32_t delta);
+
     void render(Shader shader, glm::mat4& pv_mat) {
         glm::mat4 transform = glm::translate(glm::vec3(position, 0));
 
         shader.use();
-        texture.bind(0, 2);
+        texture.bind(0, 3);
 
         buffer.bind();
         glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat[0][0]);
         glUniformMatrix4fv(1, 1, GL_FALSE, &transform[0][0]);
+        glUniform2iv(2, 1, &active_texture[0]);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
@@ -140,25 +149,64 @@ struct Core {
     }
 
     void math(uint32_t delta_time) {
-        double move_dist = 0.000000005 * delta_time;
-        glm::dvec2 move_vec(0, 0);
-        if(keymap[GLFW_KEY_W]) {
-            move_vec.y += 1;
-        }
-        if(keymap[GLFW_KEY_A]) {
-            move_vec.x -= 1;
-        }
-        if(keymap[GLFW_KEY_S]) {
-            move_vec.y -= 1;
-        }
-        if(keymap[GLFW_KEY_D]) {
-            move_vec.x += 1;
-        }
-
-        if(!(move_vec.x == 0.0 && move_vec.y == 0.0)) camera.pos += glm::normalize(move_vec) * move_dist;
+        player.tick(*this, delta_time);
+        camera.pos = player.position + glm::dvec2(0.0, 0.9375);
     }
 
     //void render() {
 
     //}
 };
+
+// needs to be moved so the core can be passed as parameter
+void Player::tick(Core& core, uint32_t delta_time) {
+    double seconds = 0.000000001 * delta_time;
+    double move_dist = 5.0 * seconds;
+    glm::dvec2 move_vec(0, 0);
+    if(core.keymap[GLFW_KEY_W]) {
+        move_vec.y += 1;
+    }
+    if(core.keymap[GLFW_KEY_A]) {
+        move_vec.x -= 1;
+    }
+    if(core.keymap[GLFW_KEY_S]) {
+        move_vec.y -= 1;
+    }
+    if(core.keymap[GLFW_KEY_D]) {
+        move_vec.x += 1;
+    }
+
+    if(!(move_vec.x == 0.0 && move_vec.y == 0.0)) {
+        if(active_texture.x == 0) {
+            active_texture.x = 2;
+        }
+        
+        position += glm::normalize(move_vec) * move_dist;
+    
+        if(move_vec.y > 0.0) {
+            dir_facing = NORTH;
+        } else if(move_vec.y < 0.0) {
+            dir_facing = SOUTH;
+        } else {
+            if(move_vec.x > 0.0) {
+                dir_facing = EAST;
+            } else if(move_vec.x < 0.0) {
+                dir_facing = WEST;
+            }
+        }
+
+        frame_timer += seconds;
+        if(frame_timer >= 0.175) {
+            frame_timer -= 0.175;
+            active_texture.x++;
+            if(active_texture.x == 5) {
+                active_texture.x = 1;
+            }
+        }
+    } else {
+        active_texture.x = 0;
+        frame_timer = 0.0;
+    }
+
+    active_texture.y = dir_facing;
+}

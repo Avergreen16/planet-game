@@ -53,13 +53,14 @@ layout(location = 2) in vec2 lim;
 
 layout(location = 0) uniform mat4 pv_mat;
 layout(location = 1) uniform mat4 trans_mat;
+layout(location = 2) uniform ivec2 active_tex;
 
 out vec2 tex_coord;
 out vec2 limit;
 
 void main() {
-    tex_coord = tex;
-    limit = lim;
+    tex_coord = tex + active_tex * 32;
+    limit = lim + active_tex * 32;
     gl_Position = pv_mat * (trans_mat * vec4(pos, 1.0));
 }
 )""";
@@ -70,7 +71,7 @@ out vec4 frag_color;
 
 in vec2 tex_coord;
 in vec2 limit;
-layout(location = 2) uniform sampler2D texture_input;
+layout(location = 3) uniform sampler2D texture_input;
 
 void main() {
     frag_color = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y)), 0);

@@ -54,8 +54,10 @@ struct Buffer {
     }
 
     ~Buffer() {
-        glDeleteBuffers(1, &vertex_buffer);
-        glDeleteBuffers(1, &vertex_array);
+        if(initialized == true) {
+            glDeleteBuffers(1, &vertex_buffer);
+            glDeleteBuffers(1, &vertex_array);
+        }
     }
 };
 

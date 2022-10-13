@@ -77,6 +77,8 @@ struct Core {
     std::vector<uint64_t> active_chunks;
     std::queue<uint64_t> chunk_update_queue;
 
+    glm::ivec2 chunks_loaded = glm::ivec2(2, 2);
+    bool reload_active_chunks = true;
     
     std::thread active_chunk_thread;
     std::thread chunk_update_thread;
@@ -97,6 +99,8 @@ struct Core {
 
     Core(bool& game_running, glm::ivec2& screen_size, int& scale) : game_running(game_running), screen_size(screen_size), scale(scale) {
         mouse_pos = screen_size / 2;
+
+        chunks_loaded = glm::ivec2(ceil((0.5 * screen_size.x) / (scale * 16)), ceil((0.5 * screen_size.y) / (scale * 16)));
     };
 
     void create_textures(std::array<const char*, 2>& input) {
@@ -114,15 +118,16 @@ struct Core {
         active_chunk_thread = std::thread(
             [this]() {
                 glm::ivec2 player_current_chunk(0x7fffffff, 0x7fffffff);
-                glm::ivec2 view_area(2, 2); // chunks in each direction generated (needs to be dynamically calculated soon)
                 while(this->game_running) {
-                    glm::ivec2 updated_current_chunk(this->camera.pos.x / 16, this->camera.pos.y / 16);
+                    glm::ivec2 updated_current_chunk(floor(this->camera.pos.x / 16), floor(this->camera.pos.y / 16));
                     
-                    if(player_current_chunk != updated_current_chunk) {
+                    if(player_current_chunk != updated_current_chunk || reload_active_chunks) {
+                        reload_active_chunks = false;
+
                         player_current_chunk = updated_current_chunk;
                         std::vector<uint64_t> new_active_chunks;
-                        for(int x = -view_area.x + updated_current_chunk.x; x <= view_area.x + updated_current_chunk.x; ++x) {
-                            for(int y = -view_area.y + updated_current_chunk.y; y <= view_area.y + updated_current_chunk.y; ++y) {
+                        for(int x = -chunks_loaded.x + updated_current_chunk.x; x <= chunks_loaded.x + updated_current_chunk.x; ++x) {
+                            for(int y = -chunks_loaded.y + updated_current_chunk.y; y <= chunks_loaded.y + updated_current_chunk.y; ++y) {
                                 glm::ivec2 pos(x, y);
                                 uint64_t key = get_key(pos);
                                 new_active_chunks.push_back(key);
@@ -155,7 +160,7 @@ struct Core {
         glm::dvec2 mouse_offset = (mouse_pos - screen_size / 2) * 2;
         mouse_offset /= screen_size;
 
-        camera.pos = player.position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y);
+        camera.pos = player.position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale);
     }
 
     //void render() {

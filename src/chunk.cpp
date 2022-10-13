@@ -30,7 +30,7 @@ struct Chunk {
 
         for(int x = 0; x < 16; x++) {
             for(int y = 0; y < 16; y++) {
-                this->tiles[x + y * 16] = Tile{{0, (rand() % 4) * 16}};
+                this->tiles[x + y * 16] = Tile{{0, rand() % 5 * 16}};
             }
         }
     }

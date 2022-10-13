@@ -97,6 +97,30 @@ void cursor_pos_callback(GLFWwindow* window, double x_pos, double y_pos) {
     core.mouse_pos = glm::ivec2(x_pos, y_pos);
 }
 
+void scroll_callback(GLFWwindow* window, double x_offset, double y_offset) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+
+    if(y_offset > 0 && core.scale < 80) {
+        core.scale += 16;
+        core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+        core.reload_active_chunks = true;
+    } else if(y_offset < 0 && core.scale > 16) {
+        core.scale -= 16;
+        core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+        core.reload_active_chunks = true;
+    }
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    core.screen_size.x = width + 1 * (width % 2 == 1);
+    core.screen_size.y = height + 1 * (height % 2 == 1);
+    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+
+    core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+    core.reload_active_chunks = true;
+}
+
 int main() {
     bool game_running = true;
     glm::ivec2 screen_size(800, 600);
@@ -133,6 +157,8 @@ int main() {
     // set callbacks
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     // texture address array
     std::array<const char*, 2> addresses = {
@@ -164,11 +190,6 @@ int main() {
     buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
 
     while(game_running) {
-        glfwGetFramebufferSize(window, &screen_size.x, &screen_size.y);
-        screen_size.x += 1 * (screen_size.x % 2 == 1);
-        screen_size.y += 1 * (screen_size.y % 2 == 1);
-        glViewport(0, 0, screen_size.x, screen_size.y);
-
         glfwPollEvents();
 
         // math
@@ -191,6 +212,10 @@ int main() {
         // draw
         shader.use();
         core.textures[0].bind(0, 1);
+
+        // this is to stop too many chunks from being loaded into the gpu per frame and lagging the game
+        int chunks_loaded_vertices = 0;
+
         for(uint64_t& key : core.active_chunks) {
             if(core.loaded_chunks.contains(key)) {
                 Chunk& chunk = core.loaded_chunks[key];
@@ -201,8 +226,9 @@ int main() {
                     glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
                     glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
                 // if vertices have been generated but not loaded
-                } else if(chunk.vertex_status == 1) {
+                } else if(chunk.vertex_status == 1 && chunks_loaded_vertices < 5) {
                     chunk.load_mesh();
+                    ++chunks_loaded_vertices;
                 // if vertices haven't been generated
                 } else if(chunk.vertex_status == 0) {
                     chunk.vertex_status = 3; // stops the key from being inserted into the queue more that once
@@ -228,6 +254,9 @@ int main() {
 
         game_running = !glfwWindowShouldClose(window);
     }
+
+    if(core.active_chunk_thread.joinable()) core.active_chunk_thread.join();
+    if(core.chunk_update_thread.joinable()) core.chunk_update_thread.join();
 
     glfwTerminate();
     std::cout << "Successfuly terminated!\n";

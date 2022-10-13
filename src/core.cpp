@@ -72,6 +72,7 @@ struct Player {
 struct Core {
     Camera camera;
     Player player;
+    glm::ivec2 mouse_pos;
     std::unordered_map<uint64_t, Chunk> loaded_chunks;
     std::vector<uint64_t> active_chunks;
     std::queue<uint64_t> chunk_update_queue;
@@ -89,13 +90,14 @@ struct Core {
 
     std::array<Texture, 2> textures;
 
-    int& screen_width;
-    int& screen_height;
+    glm::ivec2& screen_size;
     int& scale;
     
     bool& game_running;
 
-    Core(bool& game_running, int& width, int& height, int& scale) : game_running(game_running), screen_width(width), screen_height(height), scale(scale) {};
+    Core(bool& game_running, glm::ivec2& screen_size, int& scale) : game_running(game_running), screen_size(screen_size), scale(scale) {
+        mouse_pos = screen_size / 2;
+    };
 
     void create_textures(std::array<const char*, 2>& input) {
         for(int i = 0; i < input.size(); ++i) {
@@ -150,7 +152,10 @@ struct Core {
 
     void math(uint32_t delta_time) {
         player.tick(*this, delta_time);
-        camera.pos = player.position + glm::dvec2(0.0, 0.9375);
+        glm::dvec2 mouse_offset = (mouse_pos - screen_size / 2) * 2;
+        mouse_offset /= screen_size;
+
+        camera.pos = player.position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y);
     }
 
     //void render() {

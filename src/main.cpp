@@ -92,9 +92,15 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     }
 }
 
+void cursor_pos_callback(GLFWwindow* window, double x_pos, double y_pos) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    core.mouse_pos = glm::ivec2(x_pos, y_pos);
+}
+
 int main() {
     bool game_running = true;
-    int width = 800, height = 600, scale = 48;
+    glm::ivec2 screen_size(800, 600);
+    int scale = 48;
 
     stbi_set_flip_vertically_on_load(true);
     // init glfw
@@ -107,7 +113,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow* window = glfwCreateWindow(width, height, "This is a test.", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(screen_size.x, screen_size.y, "This is a test.", NULL, NULL);
     if(window == NULL) {
         std::cout << "ERROR: Window creation failed.\n";
         glfwTerminate();
@@ -126,6 +132,7 @@ int main() {
 
     // set callbacks
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
 
     // texture address array
     std::array<const char*, 2> addresses = {
@@ -134,7 +141,7 @@ int main() {
     };
 
     // core
-    Core core(game_running, width, height, scale);
+    Core core(game_running, screen_size, scale);
     core.create_textures(addresses);
     core.init(glm::dvec2{0, 0});
     glfwSetWindowUserPointer(window, (void*)&core);
@@ -157,10 +164,10 @@ int main() {
     buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
 
     while(game_running) {
-        glfwGetFramebufferSize(window, &width, &height);
-        width += 1 * (width % 2 == 1);
-        height += 1 * (height % 2 == 1);
-        glViewport(0, 0, width, height);
+        glfwGetFramebufferSize(window, &screen_size.x, &screen_size.y);
+        screen_size.x += 1 * (screen_size.x % 2 == 1);
+        screen_size.y += 1 * (screen_size.y % 2 == 1);
+        glViewport(0, 0, screen_size.x, screen_size.y);
 
         glfwPollEvents();
 
@@ -176,8 +183,8 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         //get matrix
-        float w = float(width / 2) / scale;
-        float h = float(height / 2) / scale;
+        float w = float(screen_size.x / 2) / scale;
+        float h = float(screen_size.y / 2) / scale;
         glm::mat4 pv_matrix = glm::ortho(-w, w, -h, h, 0.0f, 16.0f);
         pv_matrix *= core.camera.get_view_matrix();
 

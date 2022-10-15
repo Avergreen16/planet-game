@@ -33,6 +33,7 @@ struct Core;
 
 struct Player {
     glm::dvec2 position;
+    glm::dvec2 visual_position;
     glm::ivec2 active_texture = glm::ivec2(0, 0);
     Texture texture;
     Buffer buffer;
@@ -43,6 +44,7 @@ struct Player {
     
     void init(glm::dvec2 pos, Texture& tex) {
         this->position = pos;
+        this->visual_position = glm::dvec2(round(position.x * 16) / 16, round(position.y * 16) / 16);
         this->texture = tex;
 
         buffer.init();
@@ -55,7 +57,7 @@ struct Player {
     void tick(Core& core, uint32_t delta);
 
     void render(Shader shader, glm::mat4& pv_mat) {
-        glm::mat4 transform = glm::translate(glm::vec3(position, 0));
+        glm::mat4 transform = glm::translate(glm::vec3(visual_position, 0));
 
         shader.use();
         texture.bind(0, 3);
@@ -83,11 +85,17 @@ struct Core {
     std::thread active_chunk_thread;
     std::thread chunk_update_thread;
 
+    Framebuffer<2> framebuffer;
+    Framebuffer<1> framebuffer_light;
+    Framebuffer<1> fb_light;
+
     std::unordered_map<GLuint, bool> keymap = {
         {GLFW_KEY_W, false},
         {GLFW_KEY_A, false},
         {GLFW_KEY_S, false},
-        {GLFW_KEY_D, false}
+        {GLFW_KEY_D, false},
+        {GLFW_KEY_SPACE, false},
+        {GLFW_KEY_M, false}
     };
 
     std::array<Texture, 2> textures;
@@ -101,6 +109,10 @@ struct Core {
         mouse_pos = screen_size / 2;
 
         chunks_loaded = glm::ivec2(ceil((0.5 * screen_size.x) / (scale * 16)), ceil((0.5 * screen_size.y) / (scale * 16)));
+
+        framebuffer.init(screen_size.x, screen_size.y);
+        framebuffer_light.init(128, 128);
+        fb_light.init(screen_size.x, screen_size.y);
     };
 
     void create_textures(std::array<const char*, 2>& input) {
@@ -160,7 +172,15 @@ struct Core {
         glm::dvec2 mouse_offset = (mouse_pos - screen_size / 2) * 2;
         mouse_offset /= screen_size;
 
-        camera.pos = player.position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale);
+        camera.pos = player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale);
+
+        if(keymap[GLFW_KEY_M]) {
+            std::vector<uint8_t> vector(screen_size.x * screen_size.y * 3);
+            glReadPixels(0, 0, screen_size.x, screen_size.y, GL_RGB, GL_UNSIGNED_BYTE, vector.data());
+
+            stbi__flip_vertically_on_write = true;
+            stbi_write_png("output\\screenshot.png", screen_size.x, screen_size.y, 3, vector.data(), screen_size.x * 3);
+        }
     }
 
     //void render() {
@@ -171,7 +191,6 @@ struct Core {
 // needs to be moved so the core can be passed as parameter
 void Player::tick(Core& core, uint32_t delta_time) {
     double seconds = 0.000000001 * delta_time;
-    double move_dist = 5.0 * seconds;
     glm::dvec2 move_vec(0, 0);
     if(core.keymap[GLFW_KEY_W]) {
         move_vec.y += 1;
@@ -184,6 +203,15 @@ void Player::tick(Core& core, uint32_t delta_time) {
     }
     if(core.keymap[GLFW_KEY_D]) {
         move_vec.x += 1;
+    }
+
+    bool is_sprinting = false;
+    double move_dist;
+    if(core.keymap[GLFW_KEY_SPACE]) {
+        move_dist = 8.0 * seconds;
+        is_sprinting = true;
+    } else {
+        move_dist = 4.0 * seconds;
     }
 
     if(!(move_vec.x == 0.0 && move_vec.y == 0.0)) {
@@ -205,9 +233,9 @@ void Player::tick(Core& core, uint32_t delta_time) {
             }
         }
 
-        frame_timer += seconds;
-        if(frame_timer >= 0.175) {
-            frame_timer -= 0.175;
+        frame_timer += seconds * (1 + 0.5 * is_sprinting);
+        if(frame_timer >= 0.21875) {
+            frame_timer -= 0.21875;
             active_texture.x++;
             if(active_texture.x == 5) {
                 active_texture.x = 1;
@@ -217,6 +245,8 @@ void Player::tick(Core& core, uint32_t delta_time) {
         active_texture.x = 0;
         frame_timer = 0.0;
     }
+
+    visual_position = glm::dvec2(round(position.x * 16) / 16, round(position.y * 16) / 16);
 
     active_texture.y = dir_facing;
 }

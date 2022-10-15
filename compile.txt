@@ -1,1 +1,39 @@
 g++ src/main.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\main
+
+const char* vss_light = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+void main() {
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)""";
+
+const char* fss_light = R"""(
+#version 460 core
+out vec4 frag_color;
+
+layout(location = 0) uniform sampler2D ray_lengths;
+layout(location = 2) uniform ivec2 light_pos;
+layout(location = 3) uniform int light_rad;
+
+float pi = 3.14159265358979323846;
+
+void main() {
+    vec2 rel_pos = gl_FragCoord.xy - light_pos;
+    float squared_dist = rel_pos.x * rel_pos.x + rel_pos.y * rel_pos.y;
+    if(squared_dist <= light_rad * light_rad) {
+        float theta = atan(rel_pos.y, rel_pos.x) + pi;
+        int ray = int(theta * light_rad);
+
+        int ray_ycoord = ray / 128;
+        int ray_xcoord = ray - ray_ycoord * 128;
+
+        float length = texelFetch(ray_lengths, ivec2(ray_xcoord, ray_ycoord), 0).x * 256;
+
+        if(squared_dist <= length * length) {
+            frag_color = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+    } else discard;
+}
+)""";

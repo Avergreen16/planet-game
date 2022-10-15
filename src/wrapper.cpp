@@ -57,6 +57,8 @@ struct Buffer {
         if(initialized == true) {
             glDeleteBuffers(1, &vertex_buffer);
             glDeleteBuffers(1, &vertex_array);
+
+            std::cout << "Buffer deleted\n";
         }
     }
 };
@@ -84,7 +86,14 @@ struct Shader {
         // check if fragment shader compiled correctly
         glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &compile_check);
         if(compile_check == GL_FALSE) {
-            std::cout << "ERROR: Fragment shader failed to compile.\n";
+
+            int log_size = 0;
+            glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &log_size);
+
+            std::vector<char> error_log(log_size);
+	        glGetShaderInfoLog(fragment_shader, log_size, &log_size, &error_log[0]);
+            std::cout << "ERROR: Fragment shader failed to compile:\n" << error_log.data() << "\n";
+
             glDeleteShader(vertex_shader);
             return false;
         }
@@ -107,25 +116,28 @@ struct Shader {
 
 struct Texture {
     GLuint id;
+    glm::ivec2 size;
+    int num_channels;
+    GLenum format;
 
     bool load(const char* path) {
         glGenTextures(1, &id);
         glBindTexture(GL_TEXTURE_2D, id);
         
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-        int width, height, num_channels;
-        uint8_t* data = stbi_load(path, &width, &height, &num_channels, 0);
+        uint8_t* data = stbi_load(path, &size.x, &size.y, &num_channels, 0);
 
         if(!data) {
             std::cout << "ERROR: Texture failed to load.\n";
             return false;
         } else {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size.x, size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
             stbi_image_free(data);
+
+            format = GL_RGBA;
+
             return true;
         }
     }
@@ -135,4 +147,90 @@ struct Texture {
         glBindTexture(GL_TEXTURE_2D, id);
         glUniform1i(uniform, tex_id);
     }
+
+    void bind() {
+        glBindTexture(GL_TEXTURE_2D, id);
+    }
 };
+
+template<size_t num_color_buffers>
+struct Framebuffer {
+    GLuint id;
+    Texture color_tex[num_color_buffers];
+    //Texture depth_stencil_tex;
+    GLuint depth_buffer;
+    bool initialized = false;
+
+    void init(int width, int height) {
+        initialized = true;
+        glGenFramebuffers(1, &id);
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+
+        // allocate and bind color texture
+        for(int i = 0; i < num_color_buffers; i++) {
+            glGenTextures(1, &color_tex[i].id);
+            glBindTexture(GL_TEXTURE_2D, color_tex[i].id);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, color_tex[i].id, 0);
+
+            color_tex[i].size.x = width;
+            color_tex[i].size.y = height;
+            color_tex[i].num_channels = 3;
+            color_tex[i].format = GL_RGB;
+        }
+
+        // allocate and bind depth texture
+        /*glGenTextures(1, &depth_stencil_tex.id);
+        glBindTexture(GL_TEXTURE_2D, depth_stencil_tex.id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depth_stencil_tex.id, 0);*/
+
+        // renderbuffer for depth
+        glGenRenderbuffers(1, &depth_buffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
+
+        if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
+        else std::cout << "Framebuffer NOT complete\n";
+    }
+    
+    void bind() {
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+    }
+
+    void resize(glm::ivec2 new_size) {
+        bind();
+        glViewport(0, 0, new_size.x, new_size.y);
+
+        for(int i = 0; i < num_color_buffers; i++) {
+            color_tex[i].bind();
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, new_size.x, new_size.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+            color_tex[i].size = new_size;
+        }
+
+        glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, new_size.x, new_size.y);
+    }
+
+    ~Framebuffer() {
+        if(initialized) {
+            glDeleteFramebuffers(1, &id);
+        }
+    }
+};
+
+void save_texture(Texture& texture, const char* save_path) {
+    std::vector<uint8_t> vector(texture.size.x * texture.size.y * texture.num_channels);
+    texture.bind();
+    glGetTexImage(GL_TEXTURE_2D, 0, texture.format, GL_UNSIGNED_BYTE, vector.data());
+
+    stbi__flip_vertically_on_write = true;
+    stbi_write_png(save_path, texture.size.x, texture.size.y, texture.num_channels, vector.data(), texture.size.x * texture.num_channels);
+}

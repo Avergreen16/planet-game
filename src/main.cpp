@@ -33,15 +33,17 @@ void main() {
 
 const char* fragment_shader_source = R"""(
 #version 460 core
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color0;
+layout(location = 1) out vec4 frag_color1;
 
 in vec2 tex_coord;
 in vec2 limit;
 layout(location = 1) uniform sampler2D texture_input;
 
 void main() {
-    frag_color = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y)), 0);
-    if(frag_color.w == 0.0) discard;
+    frag_color0 = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y)), 0);
+    if(frag_color0.w == 0.0) discard;
+    frag_color1 = vec4(0.0, 0.0, 0.0, 1.0);
 } 
 )""";
 
@@ -67,17 +69,174 @@ void main() {
 
 const char* fss_player = R"""(
 #version 460 core
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color0;
+layout(location = 1) out vec4 frag_color1;
 
 in vec2 tex_coord;
 in vec2 limit;
 layout(location = 3) uniform sampler2D texture_input;
 
 void main() {
-    frag_color = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y)), 0);
-    if(frag_color.w == 0.0) discard;
+    frag_color0 = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y)), 0);
+    frag_color1 = texelFetch(texture_input, ivec2(min(tex_coord.x, limit.x), min(tex_coord.y, limit.y) + 128), 0);
+    if(frag_color0.w == 0.0) discard;
 } 
 )""";
+
+const char* vss_screen = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+out vec2 tex_coord;
+
+void main() {
+    tex_coord = pos;
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)""";
+
+const char* vss_screen2 = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+out vec2 tex_coord;
+
+void main() {
+    tex_coord = pos;
+    gl_Position = vec4((pos + vec2(1.0, 1.0)) / 8 - vec2(1.0, 1.0), 0.0, 1.0);
+}
+)""";
+
+const char* fss_screen = R"""(
+#version 460 core
+out vec4 frag_color;
+
+in vec2 tex_coord;
+
+layout(location = 0) uniform sampler2D tex;
+layout(location = 1) uniform sampler2D shadow_tex;
+layout(location = 2) uniform sampler2D light_tex;
+
+void main() {
+    vec4 background_color = texture(tex, (tex_coord + 1) / 2);
+    vec4 light_color = texture(light_tex, (tex_coord + 1) / 2);
+    vec4 shadow_color = texture(shadow_tex, (tex_coord + 1) / 2);
+    if(shadow_color.y != 0.0) {
+        frag_color = background_color;
+    } else {
+        frag_color = vec4(background_color.x * light_color.x, background_color.y * light_color.y, background_color.z * light_color.z, 1.0);
+    }
+}
+)""";
+
+const char* fss_screen2 = R"""(
+#version 460 core
+out vec4 frag_color;
+
+in vec2 tex_coord;
+
+layout(location = 0) uniform sampler2D tex;
+
+void main() {
+    frag_color = texture(tex, (tex_coord + 1) / 2);
+}
+)""";
+
+const char* vss_raycast = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+void main() {
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)""";
+
+const char* fss_raycast = R"""(
+#version 460 core
+out vec4 frag_color;
+
+layout(location = 0) uniform sampler2D tex;
+layout(location = 1) uniform ivec2 screen_size;
+layout(location = 2) uniform ivec2 light_pos;
+layout(location = 3) uniform int light_rad;
+
+float pi = 3.14159265358979323846;
+
+void main() {
+    float num_rays = floor(light_rad * pi * 2);
+    int pos = int((gl_FragCoord.x - 0.5) + ((gl_FragCoord.y - 0.5) * 128));
+    if(pos < num_rays) {
+        float theta = (pos / num_rays) * (pi * 2);
+        vec2 step = vec2(cos(theta), sin(theta));
+
+        float length = 0.0;
+
+        bool stop = false;
+        for(int i = 0; i < 256; i++) {
+            if(stop == false && i < light_rad) {
+                ivec2 step_pos = ivec2(floor(step.x * i + 0.5), floor(step.y * i + 0.5)) + light_pos;
+                vec4 color = texelFetch(tex, step_pos, 0);
+                if(color.x != 0.0) {
+                    stop = true;
+                } else {
+                    length++;
+                }
+            }
+        }
+
+        frag_color = vec4(length / 256, 0.0, 0.0, 1.0);
+    } else discard;
+}
+)""";
+
+const char* vss_light = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+void main() {
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)""";
+
+const char* fss_light = R"""(
+#version 460 core
+out vec4 frag_color;
+
+layout(location = 0) uniform sampler2D ray_lengths;
+layout(location = 1) uniform ivec2 light_pos;
+layout(location = 2) uniform int light_rad;
+
+float pi = 3.14159265358979323846;
+
+void main() {
+    vec2 rel_pos = gl_FragCoord.xy - vec2(0.49, 0.49) - light_pos;
+    float squared_dist = rel_pos.x * rel_pos.x + rel_pos.y * rel_pos.y;
+    if(squared_dist <= light_rad * light_rad) {
+        float theta = atan(-rel_pos.y, -rel_pos.x) + pi;
+        int ray = int(theta * light_rad);
+        int ray_ycoord = ray / 128;
+        int ray_xcoord = ray - ray_ycoord * 128;
+
+        float length = texelFetch(ray_lengths, ivec2(ray_xcoord, ray_ycoord), 0).x * 256;
+
+        if(squared_dist <= length * length) {
+            float light = max(1.0 - float(squared_dist) / (light_rad * light_rad), 0.3125);
+            frag_color = vec4(light, light, light, 1.0);
+        } else {
+            frag_color = vec4(0.3125, 0.3125, 0.3125, 1.0);
+        }
+    } else discard;
+}
+)""";
+
+std::array<glm::vec2, 6> screen_vertices = {
+    glm::vec2{-1, -1},
+    glm::vec2{1, -1},
+    glm::vec2{-1, 1},
+    glm::vec2{-1, 1},
+    glm::vec2{1, -1},
+    glm::vec2{1, 1}
+};
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
@@ -119,6 +278,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
     core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
     core.reload_active_chunks = true;
+
+    core.framebuffer.resize({width, height});
+    core.fb_light.resize({width, height});
 }
 
 int main() {
@@ -179,6 +341,18 @@ int main() {
     Shader player_shader;
     player_shader.compile(vss_player, fss_player);
 
+    Shader screen_shader;
+    screen_shader.compile(vss_screen, fss_screen);
+
+    Shader icon_shader;
+    icon_shader.compile(vss_screen2, fss_screen2);
+
+    Shader raycast_shader;
+    raycast_shader.compile(vss_raycast, fss_raycast);
+
+    Shader light_shader;
+    light_shader.compile(vss_light, fss_light);
+
     time_t last_time = get_time();
     uint32_t delta_time;
 
@@ -188,6 +362,17 @@ int main() {
     buffer.set_attrib(0, 3, 7 * sizeof(float), 0);
     buffer.set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
     buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
+
+    // framebuffer
+
+    Buffer screen_buffer;
+    screen_buffer.init();
+    screen_buffer.set_data(screen_vertices.data(), sizeof(glm::vec3) * screen_vertices.size());
+    screen_buffer.set_attrib(0, 2, 2 * sizeof(float), 0);
+
+    //
+    
+    glClearColor(0.0, 0.0, 0.0, 1.0);
 
     while(game_running) {
         glfwPollEvents();
@@ -200,7 +385,10 @@ int main() {
         core.math(delta_time);
 
         //render
-        glClearColor(0.2, 0.3, 0.3, 1.0);
+        core.framebuffer.bind();
+        GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(2, buffers);
+
         glClear(GL_COLOR_BUFFER_BIT);
 
         //get matrix
@@ -247,8 +435,49 @@ int main() {
         glUniformMatrix4fv(1, 1, GL_FALSE, &transform[0][0]);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);*/
-
+        
         core.player.render(player_shader, pv_matrix);
+        
+        glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
+
+        // raycast
+        core.framebuffer_light.bind();
+
+        raycast_shader.use();
+        core.framebuffer.color_tex[1].bind(0, 0);
+        glUniform2iv(1, 1, &screen_size[0]);
+        glUniform2iv(2, 1, &mouse_pos_yinv[0]);
+        glUniform1i(3, 5 * scale);
+        screen_buffer.bind();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        //
+
+        // draw light
+        core.fb_light.bind();
+        glClearColor(0.3125, 0.3125, 0.3125, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.0, 0.0, 0.0, 1.0);
+
+        light_shader.use();
+        core.framebuffer_light.color_tex[0].bind(0, 0);
+        glUniform2iv(1, 1, &mouse_pos_yinv[0]);
+        glUniform1i(2, 5 * scale);
+
+        screen_buffer.bind();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        //
+        
+
+        // render framebuffer texture
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        screen_shader.use();
+        screen_buffer.bind();
+        core.framebuffer.color_tex[0].bind(0, 0);
+        core.framebuffer.color_tex[1].bind(1, 1);
+        core.fb_light.color_tex[0].bind(2, 2);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glfwSwapBuffers(window);
 
@@ -259,7 +488,7 @@ int main() {
     if(core.chunk_update_thread.joinable()) core.chunk_update_thread.join();
 
     glfwTerminate();
-    std::cout << "Successfuly terminated!\n";
+    std::cout << "Successfully terminated!\n";
 
     return 0;
 }

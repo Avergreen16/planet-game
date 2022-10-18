@@ -17,8 +17,8 @@ struct Camera {
         return glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f));
     }
 
-    glm::mat4 get_view_matrix_sun() {
-        return glm::lookAt(pos, glm::dvec3(0.0, 0.0, 0.0), glm::dvec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 get_view_matrix_sun(glm::dvec3 player_pos) {
+        return glm::lookAt(pos + player_pos, player_pos, glm::dvec3(0.0f, 0.0f, 1.0f));
     }
 };
 
@@ -78,8 +78,11 @@ struct Player {
 struct Core {
     Camera camera;
 
-    Camera sun_camera;
-    Framebuffer_depth light_depth_buffer;
+    Camera sun_camera0;
+    Framebuffer_depth light_depth_buffer0;
+
+    Camera sun_camera1;
+    Framebuffer_depth light_depth_buffer1;
 
     Player player;
     glm::ivec2 mouse_pos;
@@ -92,6 +95,7 @@ struct Core {
     
     std::thread active_chunk_thread;
     std::thread chunk_update_thread;
+    std::thread input_loop_thread;
 
     Framebuffer<2> framebuffer;
     Framebuffer<1> framebuffer_light;
@@ -124,7 +128,8 @@ struct Core {
         framebuffer_light.init(128, 128);
         fb_light.init(screen_size.x, screen_size.y);
 
-        light_depth_buffer.init(1024, 1024);
+        light_depth_buffer0.init(1536, 1536);
+        light_depth_buffer1.init(1536, 1536);
     };
 
     void create_textures(std::array<const char*, 2>& input) {
@@ -135,7 +140,9 @@ struct Core {
 
     void init(glm::dvec2 camera_pos) {
         this->camera.pos = glm::dvec3(camera_pos, 1.0);
-        this->sun_camera.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(30.0, -20.0, 15.0);
+        this->sun_camera0.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(3.0, -10.0, 12.0);
+        this->sun_camera1.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(3.0, -11.0, 11.5);
+
         player.init(camera_pos, textures[1]);
 
         // checks if the player moves between chunks, and if so, generates a new vector of chunk ids that corresponds to the player's new
@@ -175,6 +182,16 @@ struct Core {
 
                         this->loaded_chunks[key].generate_mesh();
                     }
+                }
+            }
+        );
+
+        input_loop_thread = std::thread(
+            [this]() {
+                while(this->game_running) {
+                    glm::ivec3 new_pos;
+                    std::cin >> new_pos.x >> new_pos.y >> new_pos.z;
+                    sun_camera0.pos = glm::dvec3(new_pos);
                 }
             }
         );

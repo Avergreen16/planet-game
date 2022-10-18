@@ -209,13 +209,13 @@ struct Framebuffer {
         else std::cout << "Framebuffer NOT complete\n";*/
     }
     
-    void bind() {
+    void bind(int width, int height) {
         glBindFramebuffer(GL_FRAMEBUFFER, id);
+        glViewport(0, 0, width, height);
     }
 
     void resize(glm::ivec2 new_size) {
-        bind();
-        glViewport(0, 0, new_size.x, new_size.y);
+        bind(new_size.x, new_size.y);
 
         for(int i = 0; i < num_color_buffers; i++) {
             color_tex[i].bind();
@@ -237,7 +237,6 @@ struct Framebuffer {
 
 struct Framebuffer_depth {
     GLuint id;
-    Texture color_tex;
     Texture depth_tex;
     bool initialized = false;
 
@@ -245,19 +244,6 @@ struct Framebuffer_depth {
         initialized = true;
         glGenFramebuffers(1, &id);
         glBindFramebuffer(GL_FRAMEBUFFER, id);
-
-        // allocate and bind color texture
-        glGenTextures(1, &color_tex.id);
-        glBindTexture(GL_TEXTURE_2D, color_tex.id);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex.id, 0);
-
-        color_tex.size = {width, height};
-        color_tex.num_channels = 3;
-        color_tex.format = GL_RGB;
 
         // allocate and bind depth texture
         glGenTextures(1, &depth_tex.id);
@@ -282,13 +268,13 @@ struct Framebuffer_depth {
         glBindFramebuffer(GL_FRAMEBUFFER, id);
     }
 
+    void bind(int width, int height) {
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+        glViewport(0, 0, width, height);
+    }
+
     void resize(glm::ivec2 new_size) {
         bind();
-        glViewport(0, 0, new_size.x, new_size.y);
-
-        color_tex.bind();
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, new_size.x, new_size.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        color_tex.size = new_size;
 
         depth_tex.bind();
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, new_size.x, new_size.y, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);

@@ -103,25 +103,36 @@ in vec2 tex_coord;
 
 layout(location = 0) uniform sampler2D tex;
 layout(location = 1) uniform sampler2D tex_depth;
-layout(location = 2) uniform sampler2D shadowmap;
-layout(location = 3) uniform mat4 inverse_matrix;
-layout(location = 4) uniform mat4 shadow_matrix;
-layout(location = 5) uniform ivec2 screen_size;
-layout(location = 6) uniform vec2 near_far;
+layout(location = 2) uniform sampler2D shadowmap0;
+layout(location = 3) uniform sampler2D shadowmap1;
+
+layout(location = 4) uniform mat4 inverse_matrix;
+layout(location = 5) uniform mat4 shadow_matrix0;
+layout(location = 6) uniform mat4 shadow_matrix1;
+
+layout(location = 7) uniform ivec2 screen_size;
+layout(location = 8) uniform vec2 near_far;
 
 void main() {
     vec4 color = texture(tex, (tex_coord + 1) / 2);
     vec2 xy_pos = vec2(gl_FragCoord.x / screen_size.x, gl_FragCoord.y / screen_size.y);
-    vec4 position_in_shadowmap = shadow_matrix * inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * (near_far.y - near_far.x) + near_far.x, 1.0);
-    if(position_in_shadowmap.x < -1.0 || position_in_shadowmap.x > 1.0 || position_in_shadowmap.y < -1.0 || position_in_shadowmap.y > 1.0 || position_in_shadowmap.z < -1.0 || position_in_shadowmap.z > 1.0) {
-        frag_color = color * 0.3;
-    } else {
-        if(int(position_in_shadowmap.x * 80) % 2 == 1 || int(position_in_shadowmap.y * 80) % 2 == 1) {
-            frag_color = vec4(1.0, 1.0, 1.0, 0.0);
-        } else {
-            frag_color = texture(shadowmap, (position_in_shadowmap.xy + 1) / 2);//color;
-        }
+    vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * (near_far.y - near_far.x) + near_far.x, 1.0);
+    vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
+    vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
+    
+    frag_color = color;
+    vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
+
+    float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
+    if(shadowmap0_pos.z - 0.0007 <= shadow_depth0 * 2 - 1) {
+        mult += vec4(0.4, 0.4, 0.3, 0.0);
     }
+    float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
+    if(shadowmap1_pos.z - 0.0007 <= shadow_depth1 * 2 - 1) {
+        mult += vec4(0.2, 0.1, 0.0, 0.0);
+    }
+
+    frag_color *= mult;
 }
 )""";
 // position_in_shadowmap.x < -1.0 || position_in_shadowmap.x > 1.0 || position_in_shadowmap.y < -1.0 || position_in_shadowmap.y > 1.0 || position_in_shadowmap.z < -1.0 || position_in_shadowmap.z > 1.0
@@ -258,7 +269,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
     core.screen_size.x = width + 1 * (width % 2 == 1);
     core.screen_size.y = height + 1 * (height % 2 == 1);
-    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
 
     core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
     core.reload_active_chunks = true;
@@ -354,6 +364,10 @@ int main() {
     //
     
     glClearColor(0.0, 0.0, 0.0, 1.0);
+    framebuffer_size_callback(window, screen_size.x, screen_size.y);
+
+    int fps = 100;
+    int delta_lim = 1000000000 / fps;
 
     while(game_running) {
         glEnable(GL_DEPTH_TEST); 
@@ -363,130 +377,148 @@ int main() {
         // math
         time_t current_time = get_time();
         delta_time = current_time - last_time;
-        last_time = current_time;
 
-        core.math(delta_time);
+        if(delta_time >= delta_lim) {
+            last_time = current_time;
 
-        //render
-        core.light_depth_buffer.bind();
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            core.math(delta_time);
 
-        core.framebuffer.bind();
-        GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-        glDrawBuffers(2, buffers);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            //render
+            core.light_depth_buffer0.bind(1536, 1536);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            core.light_depth_buffer1.bind(1536, 1536);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        //get matrix
-        float w = float(screen_size.x / 2) / scale;
-        float h = float(screen_size.y / 2) / scale;
-        glm::mat4 pv_matrix = /*glm::perspective(100, , 0.5, 32.0);*/glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
-        pv_matrix *= core.camera.get_view_matrix();
-        glm::mat4 flatten_mat = glm::identity<glm::mat4>();
-        flatten_mat[2][1] = 1;
-        pv_matrix *= flatten_mat;
+            core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
+            GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glDrawBuffers(2, buffers);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 pv_mat_sun = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -20.0f, 100.0f);
-        pv_mat_sun *= core.sun_camera.get_view_matrix_sun();
+            //get matrix
+            float w = float(screen_size.x / 2) / scale;
+            float h = float(screen_size.y / 2) / scale;
+            glm::mat4 pv_matrix = /*glm::perspective(100, , 0.5, 32.0);*/glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
+            pv_matrix *= core.camera.get_view_matrix();
+            glm::mat4 flatten_mat = glm::identity<glm::mat4>();
+            flatten_mat[2][1] = 1;
+            pv_matrix *= flatten_mat;
 
-        // draw
-        shader.use();
-        core.textures[0].bind(0, 1);
+            glm::mat4 pv_mat_sun0 = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, -20.0f, 100.0f);
+            pv_mat_sun0 *= core.sun_camera0.get_view_matrix_sun(glm::dvec3(core.player.position, 0.0));
 
-        // this is to stop too many chunks from being loaded into the gpu per frame and lagging the game
-        int chunks_loaded_vertices = 0;
+            glm::mat4 pv_mat_sun1 = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, -20.0f, 100.0f);
+            pv_mat_sun1 *= core.sun_camera1.get_view_matrix_sun(glm::dvec3(core.player.position, 0.0));
 
-        for(uint64_t& key : core.active_chunks) {
-            if(core.loaded_chunks.contains(key)) {
-                Chunk& chunk = core.loaded_chunks[key];
-                // chunk vertices are in buffer
-                if(chunk.vertex_status == 2) { 
-                    chunk.buffer.bind();
+            // draw
+            shader.use();
+            core.textures[0].bind(0, 1);
 
-                    core.framebuffer.bind();
-                    glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
-                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+            // this is to stop too many chunks from being loaded into the gpu per frame and lagging the game
+            int chunks_loaded_vertices = 0;
 
-                    // render to shadowmap
-                    core.light_depth_buffer.bind();
-                    glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun[0][0]);
-                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+            for(uint64_t& key : core.active_chunks) {
+                if(core.loaded_chunks.contains(key)) {
+                    Chunk& chunk = core.loaded_chunks[key];
+                    // chunk vertices are in buffer
+                    if(chunk.vertex_status == 2) { 
+                        chunk.buffer.bind();
 
-                // if vertices have been generated but not loaded
-                } else if(chunk.vertex_status == 1 && chunks_loaded_vertices < 5) {
-                    chunk.load_mesh();
-                    ++chunks_loaded_vertices;
-                // if vertices haven't been generated
-                } else if(chunk.vertex_status == 0) {
-                    chunk.vertex_status = 3; // stops the key from being inserted into the queue more that once
-                    core.chunk_update_queue.push(key);
+                        core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
+                        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
+                        glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                        // render to shadowmapS
+                        core.light_depth_buffer0.bind(1536, 1536);
+                        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun0[0][0]);
+                        glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                        core.light_depth_buffer1.bind(1536, 1536);
+                        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun1[0][0]);
+                        glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                    // if vertices have been generated but not loaded
+                    } else if(chunk.vertex_status == 1 && chunks_loaded_vertices < 5) {
+                        chunk.load_mesh();
+                        ++chunks_loaded_vertices;
+                    // if vertices haven't been generated
+                    } else if(chunk.vertex_status == 0) {
+                        chunk.vertex_status = 3; // stops the key from being inserted into the queue more that once
+                        core.chunk_update_queue.push(key);
+                    }
                 }
             }
+            
+            core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
+            core.player.render(player_shader, pv_matrix);
+
+            core.light_depth_buffer0.bind(1536, 1536);
+            core.player.render(player_shader, pv_mat_sun0);
+
+            core.light_depth_buffer1.bind(1536, 1536);
+            core.player.render(player_shader, pv_mat_sun1);
+
+            // render shadowmap
+
+
+
+            
+            //glm::ivec2 position((0 - core.camera.pos.x * scale) + screen_size.x / 2, (0 - core.camera.pos.y * scale) + screen_size.y / 2);
+            //glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
+
+            // raycast
+            /*core.framebuffer_light.bind();
+
+            raycast_shader.use();
+            core.framebuffer.color_tex[1].bind(0, 0);
+            glUniform2iv(1, 1, &screen_size[0]);
+            glUniform2iv(2, 1, &position[0]);
+            glUniform1i(3, 5 * scale);
+            screen_buffer.bind();
+            glDrawArrays(GL_TRIANGLES, 0, 6);*/
+            //
+
+            // draw light
+            /*core.fb_light.bind();
+            glClearColor(0.3125, 0.3125, 0.3125, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glClearColor(0.0, 0.0, 0.0, 1.0);
+
+            light_shader.use();
+            core.framebuffer_light.color_tex[0].bind(0, 0);
+            glUniform2iv(1, 1, &position[0]);
+            glUniform1i(2, 5 * scale);
+
+            screen_buffer.bind();
+            glDrawArrays(GL_TRIANGLES, 0, 6);*/
+            //
+            
+
+            // render framebuffer texture
+            glDisable(GL_DEPTH_TEST); 
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            screen_shader.use();
+            screen_buffer.bind();
+            core.framebuffer.color_tex[0].bind(0, 0);
+            core.framebuffer.depth_tex.bind(1, 1);
+            core.light_depth_buffer0.depth_tex.bind(2, 2);
+            core.light_depth_buffer1.depth_tex.bind(3, 3);
+
+            glm::mat4 inverse_matrix = glm::inverse(pv_matrix);
+            glUniformMatrix4fv(4, 1, GL_FALSE, &inverse_matrix[0][0]);
+            glUniformMatrix4fv(5, 1, GL_FALSE, &pv_mat_sun0[0][0]);
+            glUniformMatrix4fv(6, 1, GL_FALSE, &pv_mat_sun1[0][0]);
+            glUniform2iv(7, 1, &screen_size[0]);
+            glUniform2f(8, -1.0f, 1.0f);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            glfwSwapBuffers(window);
+
+            game_running = !glfwWindowShouldClose(window);
         }
-        
-        core.framebuffer.bind();
-        core.player.render(player_shader, pv_matrix);
-
-        core.light_depth_buffer.bind();
-        core.player.render(player_shader, pv_mat_sun);
-
-        // render shadowmap
-
-
-
-        
-        //glm::ivec2 position((0 - core.camera.pos.x * scale) + screen_size.x / 2, (0 - core.camera.pos.y * scale) + screen_size.y / 2);
-        //glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
-
-        // raycast
-        /*core.framebuffer_light.bind();
-
-        raycast_shader.use();
-        core.framebuffer.color_tex[1].bind(0, 0);
-        glUniform2iv(1, 1, &screen_size[0]);
-        glUniform2iv(2, 1, &position[0]);
-        glUniform1i(3, 5 * scale);
-        screen_buffer.bind();
-        glDrawArrays(GL_TRIANGLES, 0, 6);*/
-        //
-
-        // draw light
-        /*core.fb_light.bind();
-        glClearColor(0.3125, 0.3125, 0.3125, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(0.0, 0.0, 0.0, 1.0);
-
-        light_shader.use();
-        core.framebuffer_light.color_tex[0].bind(0, 0);
-        glUniform2iv(1, 1, &position[0]);
-        glUniform1i(2, 5 * scale);
-
-        screen_buffer.bind();
-        glDrawArrays(GL_TRIANGLES, 0, 6);*/
-        //
-        
-
-        // render framebuffer texture
-        glDisable(GL_DEPTH_TEST); 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        screen_shader.use();
-        screen_buffer.bind();
-        core.framebuffer.color_tex[0].bind(0, 0);
-        core.framebuffer.depth_tex.bind(1, 1);
-        core.light_depth_buffer.depth_tex.bind(2, 2);
-
-        glm::mat4 inverse_matrix = glm::inverse(pv_matrix);
-        glUniformMatrix4fv(3, 1, GL_FALSE, &inverse_matrix[0][0]);
-        glUniformMatrix4fv(4, 1, GL_FALSE, &pv_mat_sun[0][0]);
-        glUniform2iv(5, 1, &screen_size[0]);
-        glUniform2f(6, -1.0f, 1.0f);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        glfwSwapBuffers(window);
-
-        game_running = !glfwWindowShouldClose(window);
     }
 
     if(core.active_chunk_thread.joinable()) core.active_chunk_thread.join();

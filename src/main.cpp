@@ -95,18 +95,6 @@ void main() {
 }
 )""";
 
-const char* vss_screen2 = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-out vec2 tex_coord;
-
-void main() {
-    tex_coord = pos;
-    gl_Position = vec4((pos + vec2(1.0, 1.0)) / 8 - vec2(1.0, 1.0), 0.0, 1.0);
-}
-)""";
-
 const char* fss_screen = R"""(
 #version 460 core
 out vec4 frag_color;
@@ -114,35 +102,31 @@ out vec4 frag_color;
 in vec2 tex_coord;
 
 layout(location = 0) uniform sampler2D tex;
-layout(location = 1) uniform sampler2D shadow_tex;
-layout(location = 2) uniform sampler2D light_tex;
+layout(location = 1) uniform sampler2D tex_depth;
+layout(location = 2) uniform sampler2D shadowmap;
+layout(location = 3) uniform mat4 inverse_matrix;
+layout(location = 4) uniform mat4 shadow_matrix;
+layout(location = 5) uniform ivec2 screen_size;
+layout(location = 6) uniform vec2 near_far;
 
 void main() {
-    vec4 background_color = texture(tex, (tex_coord + 1) / 2);
-    vec4 light_color = texture(light_tex, (tex_coord + 1) / 2);
-    vec4 shadow_color = texture(shadow_tex, (tex_coord + 1) / 2);
-    if(shadow_color.y != 0.0) {
-        frag_color = background_color;
+    vec4 color = texture(tex, (tex_coord + 1) / 2);
+    vec2 xy_pos = vec2(gl_FragCoord.x / screen_size.x, gl_FragCoord.y / screen_size.y);
+    vec4 position_in_shadowmap = shadow_matrix * inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * (near_far.y - near_far.x) + near_far.x, 1.0);
+    if(position_in_shadowmap.x < -1.0 || position_in_shadowmap.x > 1.0 || position_in_shadowmap.y < -1.0 || position_in_shadowmap.y > 1.0 || position_in_shadowmap.z < -1.0 || position_in_shadowmap.z > 1.0) {
+        frag_color = color * 0.3;
     } else {
-        frag_color = vec4(background_color.x * light_color.x, background_color.y * light_color.y, background_color.z * light_color.z, 1.0);
+        if(int(position_in_shadowmap.x * 80) % 2 == 1 || int(position_in_shadowmap.y * 80) % 2 == 1) {
+            frag_color = vec4(1.0, 1.0, 1.0, 0.0);
+        } else {
+            frag_color = texture(shadowmap, (position_in_shadowmap.xy + 1) / 2);//color;
+        }
     }
 }
 )""";
+// position_in_shadowmap.x < -1.0 || position_in_shadowmap.x > 1.0 || position_in_shadowmap.y < -1.0 || position_in_shadowmap.y > 1.0 || position_in_shadowmap.z < -1.0 || position_in_shadowmap.z > 1.0
 
-const char* fss_screen2 = R"""(
-#version 460 core
-out vec4 frag_color;
-
-in vec2 tex_coord;
-
-layout(location = 0) uniform sampler2D tex;
-
-void main() {
-    frag_color = texture(tex, (tex_coord + 1) / 2);
-}
-)""";
-
-const char* vss_raycast = R"""(
+/*const char* vss_raycast = R"""(
 #version 460 core
 layout(location = 0) in vec2 pos;
 
@@ -227,7 +211,7 @@ void main() {
         }
     } else discard;
 }
-)""";
+)""";*/
 
 std::array<glm::vec2, 6> screen_vertices = {
     glm::vec2{-1, -1},
@@ -279,8 +263,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
     core.reload_active_chunks = true;
 
-    core.framebuffer.resize({width, height});
-    core.fb_light.resize({width, height});
+    core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
+    core.fb_light.resize({core.screen_size.x, core.screen_size.y});
 }
 
 int main() {
@@ -344,14 +328,11 @@ int main() {
     Shader screen_shader;
     screen_shader.compile(vss_screen, fss_screen);
 
-    Shader icon_shader;
-    icon_shader.compile(vss_screen2, fss_screen2);
-
-    Shader raycast_shader;
+    /*Shader raycast_shader;
     raycast_shader.compile(vss_raycast, fss_raycast);
 
     Shader light_shader;
-    light_shader.compile(vss_light, fss_light);
+    light_shader.compile(vss_light, fss_light);*/
 
     time_t last_time = get_time();
     uint32_t delta_time;
@@ -375,6 +356,8 @@ int main() {
     glClearColor(0.0, 0.0, 0.0, 1.0);
 
     while(game_running) {
+        glEnable(GL_DEPTH_TEST); 
+        glDepthFunc(GL_ALWAYS);
         glfwPollEvents();
 
         // math
@@ -385,17 +368,25 @@ int main() {
         core.math(delta_time);
 
         //render
+        core.light_depth_buffer.bind();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         core.framebuffer.bind();
         GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
         glDrawBuffers(2, buffers);
-
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         //get matrix
         float w = float(screen_size.x / 2) / scale;
         float h = float(screen_size.y / 2) / scale;
-        glm::mat4 pv_matrix = glm::ortho(-w, w, -h, h, 0.0f, 16.0f);
+        glm::mat4 pv_matrix = /*glm::perspective(100, , 0.5, 32.0);*/glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
         pv_matrix *= core.camera.get_view_matrix();
+        glm::mat4 flatten_mat = glm::identity<glm::mat4>();
+        flatten_mat[2][1] = 1;
+        pv_matrix *= flatten_mat;
+
+        glm::mat4 pv_mat_sun = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -20.0f, 100.0f);
+        pv_mat_sun *= core.sun_camera.get_view_matrix_sun();
 
         // draw
         shader.use();
@@ -411,8 +402,15 @@ int main() {
                 if(chunk.vertex_status == 2) { 
                     chunk.buffer.bind();
 
+                    core.framebuffer.bind();
                     glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
                     glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                    // render to shadowmap
+                    core.light_depth_buffer.bind();
+                    glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun[0][0]);
+                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
                 // if vertices have been generated but not loaded
                 } else if(chunk.vertex_status == 1 && chunks_loaded_vertices < 5) {
                     chunk.load_mesh();
@@ -424,59 +422,66 @@ int main() {
                 }
             }
         }
-
-        /*shader.use();
-        core.textures[1].bind(0, 2);
-
-        glm::mat4 transform = glm::translate(glm::vec3(core.player.position, 0));
-
-        buffer.bind();
-        glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
-        glUniformMatrix4fv(1, 1, GL_FALSE, &transform[0][0]);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);*/
         
+        core.framebuffer.bind();
         core.player.render(player_shader, pv_matrix);
+
+        core.light_depth_buffer.bind();
+        core.player.render(player_shader, pv_mat_sun);
+
+        // render shadowmap
+
+
+
         
-        glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
+        //glm::ivec2 position((0 - core.camera.pos.x * scale) + screen_size.x / 2, (0 - core.camera.pos.y * scale) + screen_size.y / 2);
+        //glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
 
         // raycast
-        core.framebuffer_light.bind();
+        /*core.framebuffer_light.bind();
 
         raycast_shader.use();
         core.framebuffer.color_tex[1].bind(0, 0);
         glUniform2iv(1, 1, &screen_size[0]);
-        glUniform2iv(2, 1, &mouse_pos_yinv[0]);
+        glUniform2iv(2, 1, &position[0]);
         glUniform1i(3, 5 * scale);
         screen_buffer.bind();
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDrawArrays(GL_TRIANGLES, 0, 6);*/
         //
 
         // draw light
-        core.fb_light.bind();
+        /*core.fb_light.bind();
         glClearColor(0.3125, 0.3125, 0.3125, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
         glClearColor(0.0, 0.0, 0.0, 1.0);
 
         light_shader.use();
         core.framebuffer_light.color_tex[0].bind(0, 0);
-        glUniform2iv(1, 1, &mouse_pos_yinv[0]);
+        glUniform2iv(1, 1, &position[0]);
         glUniform1i(2, 5 * scale);
 
         screen_buffer.bind();
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDrawArrays(GL_TRIANGLES, 0, 6);*/
         //
         
 
         // render framebuffer texture
+        glDisable(GL_DEPTH_TEST); 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClear(GL_COLOR_BUFFER_BIT);
 
         screen_shader.use();
         screen_buffer.bind();
         core.framebuffer.color_tex[0].bind(0, 0);
-        core.framebuffer.color_tex[1].bind(1, 1);
-        core.fb_light.color_tex[0].bind(2, 2);
+        core.framebuffer.depth_tex.bind(1, 1);
+        core.light_depth_buffer.depth_tex.bind(2, 2);
+
+        glm::mat4 inverse_matrix = glm::inverse(pv_matrix);
+        glUniformMatrix4fv(3, 1, GL_FALSE, &inverse_matrix[0][0]);
+        glUniformMatrix4fv(4, 1, GL_FALSE, &pv_mat_sun[0][0]);
+        glUniform2iv(5, 1, &screen_size[0]);
+        glUniform2f(6, -1.0f, 1.0f);
+
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glfwSwapBuffers(window);

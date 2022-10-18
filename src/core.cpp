@@ -5,26 +5,30 @@ uint64_t get_key(glm::ivec2 a) {
 }
 
 struct Camera {
-    glm::dvec2 pos;
+    glm::dvec3 pos;
 
     Camera() = default;
 
-    Camera(glm::dvec2 pos) {
+    Camera(glm::dvec3 pos) {
         this->pos = pos;
     }
 
     glm::mat4 get_view_matrix() {
-        return glm::lookAt(glm::vec3(pos, 1.0f), glm::vec3(pos, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        return glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f));
+    }
+
+    glm::mat4 get_view_matrix_sun() {
+        return glm::lookAt(pos, glm::dvec3(0.0, 0.0, 0.0), glm::dvec3(0.0f, 0.0f, 1.0f));
     }
 };
 
 std::array<Vertex, 6> player_vertices = {
     Vertex{{-1, 0, 0}, {0, 0}, {31, 31}},
     Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
-    Vertex{{-1, 2, 0}, {0, 32}, {31, 31}},
-    Vertex{{-1, 2, 0}, {0, 32}, {31, 31}},
+    Vertex{{-1, 0, 2}, {0, 32}, {31, 31}},
+    Vertex{{-1, 0, 2}, {0, 32}, {31, 31}},
     Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
-    Vertex{{1, 2, 0}, {32, 32}, {31, 31}}
+    Vertex{{1, 0, 2}, {32, 32}, {31, 31}}
 };
 
 enum direction:uint16_t {NORTH, EAST, SOUTH, WEST};
@@ -73,6 +77,10 @@ struct Player {
 
 struct Core {
     Camera camera;
+
+    Camera sun_camera;
+    Framebuffer_depth light_depth_buffer;
+
     Player player;
     glm::ivec2 mouse_pos;
     std::unordered_map<uint64_t, Chunk> loaded_chunks;
@@ -95,7 +103,9 @@ struct Core {
         {GLFW_KEY_S, false},
         {GLFW_KEY_D, false},
         {GLFW_KEY_SPACE, false},
-        {GLFW_KEY_M, false}
+        {GLFW_KEY_F11, false},
+        {GLFW_KEY_UP, false},
+        {GLFW_KEY_DOWN, false}
     };
 
     std::array<Texture, 2> textures;
@@ -113,6 +123,8 @@ struct Core {
         framebuffer.init(screen_size.x, screen_size.y);
         framebuffer_light.init(128, 128);
         fb_light.init(screen_size.x, screen_size.y);
+
+        light_depth_buffer.init(1024, 1024);
     };
 
     void create_textures(std::array<const char*, 2>& input) {
@@ -122,7 +134,8 @@ struct Core {
     }
 
     void init(glm::dvec2 camera_pos) {
-        this->camera.pos = camera_pos;
+        this->camera.pos = glm::dvec3(camera_pos, 1.0);
+        this->sun_camera.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(30.0, -20.0, 15.0);
         player.init(camera_pos, textures[1]);
 
         // checks if the player moves between chunks, and if so, generates a new vector of chunk ids that corresponds to the player's new
@@ -172,9 +185,9 @@ struct Core {
         glm::dvec2 mouse_offset = (mouse_pos - screen_size / 2) * 2;
         mouse_offset /= screen_size;
 
-        camera.pos = player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale);
+        camera.pos = glm::dvec3(player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale), 1.0);
 
-        if(keymap[GLFW_KEY_M]) {
+        if(keymap[GLFW_KEY_F11]) {
             std::vector<uint8_t> vector(screen_size.x * screen_size.y * 3);
             glReadPixels(0, 0, screen_size.x, screen_size.y, GL_RGB, GL_UNSIGNED_BYTE, vector.data());
 

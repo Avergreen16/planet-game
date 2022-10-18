@@ -1,4 +1,5 @@
 #pragma once
+#define _USE_MATH_DEFINES
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>

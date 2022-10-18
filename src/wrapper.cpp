@@ -151,14 +151,18 @@ struct Texture {
     void bind() {
         glBindTexture(GL_TEXTURE_2D, id);
     }
+
+    ~Texture() {
+        glDeleteTextures(1, &id);
+    }
 };
 
 template<size_t num_color_buffers>
 struct Framebuffer {
     GLuint id;
     Texture color_tex[num_color_buffers];
-    //Texture depth_stencil_tex;
-    GLuint depth_buffer;
+    Texture depth_tex;
+    //GLuint depth_buffer;
     bool initialized = false;
 
     void init(int width, int height) {
@@ -183,22 +187,26 @@ struct Framebuffer {
         }
 
         // allocate and bind depth texture
-        /*glGenTextures(1, &depth_stencil_tex.id);
-        glBindTexture(GL_TEXTURE_2D, depth_stencil_tex.id);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glGenTextures(1, &depth_tex.id);
+        glBindTexture(GL_TEXTURE_2D, depth_tex.id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depth_stencil_tex.id, 0);*/
+        depth_tex.size = {width, height};
+
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex.id, 0);
 
         // renderbuffer for depth
-        glGenRenderbuffers(1, &depth_buffer);
+        /*glGenRenderbuffers(1, &depth_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
 
         if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
-        else std::cout << "Framebuffer NOT complete\n";
+        else std::cout << "Framebuffer NOT complete\n";*/
     }
     
     void bind() {
@@ -215,11 +223,79 @@ struct Framebuffer {
             color_tex[i].size = new_size;
         }
 
-        glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, new_size.x, new_size.y);
+        depth_tex.bind();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, new_size.x, new_size.y, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
+        depth_tex.size = new_size;
     }
 
     ~Framebuffer() {
+        if(initialized) {
+            glDeleteFramebuffers(1, &id);
+        }
+    }
+};
+
+struct Framebuffer_depth {
+    GLuint id;
+    Texture color_tex;
+    Texture depth_tex;
+    bool initialized = false;
+
+    void init(int width, int height) {
+        initialized = true;
+        glGenFramebuffers(1, &id);
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+
+        // allocate and bind color texture
+        glGenTextures(1, &color_tex.id);
+        glBindTexture(GL_TEXTURE_2D, color_tex.id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex.id, 0);
+
+        color_tex.size = {width, height};
+        color_tex.num_channels = 3;
+        color_tex.format = GL_RGB;
+
+        // allocate and bind depth texture
+        glGenTextures(1, &depth_tex.id);
+        glBindTexture(GL_TEXTURE_2D, depth_tex.id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        depth_tex.size = {width, height};
+
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex.id, 0);
+
+        // renderbuffer for depth
+
+        if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
+        else std::cout << "Framebuffer NOT complete\n";
+    }
+    
+    void bind() {
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+    }
+
+    void resize(glm::ivec2 new_size) {
+        bind();
+        glViewport(0, 0, new_size.x, new_size.y);
+
+        color_tex.bind();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, new_size.x, new_size.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        color_tex.size = new_size;
+
+        depth_tex.bind();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, new_size.x, new_size.y, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
+        depth_tex.size = new_size;
+    }
+
+    ~Framebuffer_depth() {
         if(initialized) {
             glDeleteFramebuffers(1, &id);
         }

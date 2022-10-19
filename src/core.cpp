@@ -261,8 +261,6 @@ void Player::tick(Core& core, uint32_t delta_time) {
             }
         }
 
-        dir_facing = SOUTH;
-
         frame_timer += seconds * (1 + 0.5 * is_sprinting);
         if(frame_timer >= 0.21875) {
             frame_timer -= 0.21875;

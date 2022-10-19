@@ -141,7 +141,7 @@ void main() {
 
         frag_color *= mult;
     } else {
-        frag_color *= vec4(0.5, 0.5, 0.4, 1.0) + vec4(0.5, 0.4, 0.2, 1.0) * max(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0);
+        frag_color *= vec4(0.5, 0.5, 0.4, 1.0) + vec4(0.5, 0.4, 0.2, 1.0) * (min(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0) + 1.0);
     }
 }
 )""";

@@ -111,28 +111,38 @@ layout(location = 5) uniform mat4 shadow_matrix0;
 layout(location = 6) uniform mat4 shadow_matrix1;
 
 layout(location = 7) uniform ivec2 screen_size;
-layout(location = 8) uniform int scale;
+layout(location = 8) uniform vec3 sun_pos;
+
+layout(location = 9) uniform sampler2D normal_map;
 
 void main() {
     vec4 color = texture(tex, (tex_coord + 1) / 2);
     vec2 xy_pos = vec2(gl_FragCoord.x / screen_size.x, gl_FragCoord.y / screen_size.y);
-    vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * 2 - 1, 1.0);
-    vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
-    vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
-    
+
+
     frag_color = color;
-    vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
+    vec4 normal = texture(normal_map, (tex_coord + 1) / 2);
 
-    float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
-    if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
-        mult += vec4(0.4, 0.4, 0.3, 0.0);
-    }
-    float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
-    if(shadowmap1_pos.z <= shadow_depth1 * 2 - 1) {
-        mult += vec4(0.2, 0.1, 0.0, 0.0);
-    }
+    if(normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0) {
+        vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * 2 - 1, 1.0);
+        vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
+        vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
 
-    frag_color *= mult;
+        vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
+
+        float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
+        if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
+            mult += vec4(0.4, 0.4, 0.3, 0.0);
+        }
+        float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
+        if(shadowmap1_pos.z <= shadow_depth1 * 2 - 1) {
+            mult += vec4(0.2, 0.1, 0.0, 0.0);
+        }
+
+        frag_color *= mult;
+    } else {
+        frag_color *= vec4(0.5, 0.5, 0.4, 1.0) + vec4(0.5, 0.4, 0.2, 1.0) * max(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0);
+    }
 }
 )""";
 
@@ -446,12 +456,16 @@ int main() {
             core.framebuffer.depth_tex.bind(1, 1);
             core.light_depth_buffer0.depth_tex.bind(2, 2);
             core.light_depth_buffer1.depth_tex.bind(3, 3);
+            core.framebuffer.color_tex[1].bind(4, 9);
 
             glm::mat4 inverse_matrix = glm::inverse(pv_matrix);
             glUniformMatrix4fv(4, 1, GL_FALSE, &inverse_matrix[0][0]);
             glUniformMatrix4fv(5, 1, GL_FALSE, &pv_mat_sun0[0][0]);
             glUniformMatrix4fv(6, 1, GL_FALSE, &pv_mat_sun1[0][0]);
             glUniform2iv(7, 1, &screen_size[0]);
+            glm::vec3 sun_pos(core.sun_camera0.pos - glm::dvec3(core.player.position, 0.0));
+            sun_pos.y = -sun_pos.y;
+            glUniform3fv(8, 1, &sun_pos[0]);
 
             glDrawArrays(GL_TRIANGLES, 0, 6);
 

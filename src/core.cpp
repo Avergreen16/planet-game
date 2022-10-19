@@ -149,7 +149,7 @@ struct Core {
 
     void init(glm::dvec2 camera_pos) {
         this->camera.pos = glm::dvec3(camera_pos, 8.0);
-        this->sun_camera0.pos = glm::dvec3(8.0, -10.0, 12.0);
+        this->sun_camera0.pos = glm::dvec3(8.0, -10.0, 3.0);
         this->sun_camera1.pos = glm::dvec3(8.0, -11.0, 11.5);
 
         player.init(camera_pos, textures[1]);
@@ -260,6 +260,8 @@ void Player::tick(Core& core, uint32_t delta_time) {
                 dir_facing = WEST;
             }
         }
+
+        dir_facing = SOUTH;
 
         frame_timer += seconds * (1 + 0.5 * is_sprinting);
         if(frame_timer >= 0.21875) {

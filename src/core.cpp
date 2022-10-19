@@ -16,9 +16,19 @@ struct Camera {
     glm::mat4 get_view_matrix() {
         return glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f));
     }
+};
 
-    glm::mat4 get_view_matrix_sun(glm::dvec3 player_pos) {
-        return glm::lookAt(pos + player_pos, player_pos, glm::dvec3(0.0f, 0.0f, 1.0f));
+struct Light_camera {
+    glm::dvec3 pos;
+
+    Light_camera() = default;
+
+    Light_camera(glm::dvec3 pos) {
+        this->pos = pos;
+    }
+
+    glm::mat4 get_view_matrix(glm::dvec3 player_pos) {
+        return glm::lookAt(pos, player_pos, glm::dvec3(0.0f, 0.0f, 1.0f));
     }
 };
 
@@ -77,29 +87,27 @@ struct Player {
 
 struct Core {
     Camera camera;
+    Player player;
 
-    Camera sun_camera0;
+    Light_camera sun_camera0;
+    Light_camera sun_camera1;
     Framebuffer_depth light_depth_buffer0;
-
-    Camera sun_camera1;
     Framebuffer_depth light_depth_buffer1;
 
-    Player player;
     glm::ivec2 mouse_pos;
+
     std::unordered_map<uint64_t, Chunk> loaded_chunks;
     std::vector<uint64_t> active_chunks;
     std::queue<uint64_t> chunk_update_queue;
-
     glm::ivec2 chunks_loaded = glm::ivec2(2, 2);
     bool reload_active_chunks = true;
     
     std::thread active_chunk_thread;
     std::thread chunk_update_thread;
-    std::thread input_loop_thread;
 
     Framebuffer<2> framebuffer;
-    Framebuffer<1> framebuffer_light;
-    Framebuffer<1> fb_light;
+    //Framebuffer<1> framebuffer_light;
+    //Framebuffer<1> fb_light;
 
     std::unordered_map<GLuint, bool> keymap = {
         {GLFW_KEY_W, false},
@@ -112,7 +120,7 @@ struct Core {
         {GLFW_KEY_DOWN, false}
     };
 
-    std::array<Texture, 2> textures;
+    std::vector<Texture> textures;
 
     glm::ivec2& screen_size;
     int& scale;
@@ -120,28 +128,29 @@ struct Core {
     bool& game_running;
 
     Core(bool& game_running, glm::ivec2& screen_size, int& scale) : game_running(game_running), screen_size(screen_size), scale(scale) {
+        framebuffer.init(screen_size.x, screen_size.y);
+        light_depth_buffer0.init(2048, 2048);
+        light_depth_buffer1.init(2048, 2048);
+
         mouse_pos = screen_size / 2;
 
         chunks_loaded = glm::ivec2(ceil((0.5 * screen_size.x) / (scale * 16)), ceil((0.5 * screen_size.y) / (scale * 16)));
 
-        framebuffer.init(screen_size.x, screen_size.y);
-        framebuffer_light.init(128, 128);
-        fb_light.init(screen_size.x, screen_size.y);
-
-        light_depth_buffer0.init(1536, 1536);
-        light_depth_buffer1.init(1536, 1536);
+        //framebuffer_light.init(128, 128);
+        //fb_light.init(screen_size.x, screen_size.y);
     };
 
-    void create_textures(std::array<const char*, 2>& input) {
+    void create_textures(std::vector<const char*>& input) {
+        textures.resize(input.size());
         for(int i = 0; i < input.size(); ++i) {
             textures[i].load(input[i]);
         }
     }
 
     void init(glm::dvec2 camera_pos) {
-        this->camera.pos = glm::dvec3(camera_pos, 1.0);
-        this->sun_camera0.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(3.0, -10.0, 12.0);
-        this->sun_camera1.pos = glm::dvec3(camera_pos, 0.0) + glm::dvec3(3.0, -11.0, 11.5);
+        this->camera.pos = glm::dvec3(camera_pos, 8.0);
+        this->sun_camera0.pos = glm::dvec3(8.0, -10.0, 12.0);
+        this->sun_camera1.pos = glm::dvec3(8.0, -11.0, 11.5);
 
         player.init(camera_pos, textures[1]);
 
@@ -185,16 +194,6 @@ struct Core {
                 }
             }
         );
-
-        input_loop_thread = std::thread(
-            [this]() {
-                while(this->game_running) {
-                    glm::ivec3 new_pos;
-                    std::cin >> new_pos.x >> new_pos.y >> new_pos.z;
-                    sun_camera0.pos = glm::dvec3(new_pos);
-                }
-            }
-        );
     }
 
     void math(uint32_t delta_time) {
@@ -202,7 +201,7 @@ struct Core {
         glm::dvec2 mouse_offset = (mouse_pos - screen_size / 2) * 2;
         mouse_offset /= screen_size;
 
-        camera.pos = glm::dvec3(player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale), 1.0);
+        camera.pos = glm::dvec3(player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale), 8.0);
 
         if(keymap[GLFW_KEY_F11]) {
             std::vector<uint8_t> vector(screen_size.x * screen_size.y * 3);
@@ -218,7 +217,6 @@ struct Core {
     //}
 };
 
-// needs to be moved so the core can be passed as parameter
 void Player::tick(Core& core, uint32_t delta_time) {
     double seconds = 0.000000001 * delta_time;
     glm::dvec2 move_vec(0, 0);

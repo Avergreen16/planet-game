@@ -111,12 +111,12 @@ layout(location = 5) uniform mat4 shadow_matrix0;
 layout(location = 6) uniform mat4 shadow_matrix1;
 
 layout(location = 7) uniform ivec2 screen_size;
-layout(location = 8) uniform vec2 near_far;
+layout(location = 8) uniform int scale;
 
 void main() {
     vec4 color = texture(tex, (tex_coord + 1) / 2);
     vec2 xy_pos = vec2(gl_FragCoord.x / screen_size.x, gl_FragCoord.y / screen_size.y);
-    vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * (near_far.y - near_far.x) + near_far.x, 1.0);
+    vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * 2 - 1, 1.0);
     vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
     vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
     
@@ -124,105 +124,17 @@ void main() {
     vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
 
     float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
-    if(shadowmap0_pos.z - 0.0007 <= shadow_depth0 * 2 - 1) {
+    if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
         mult += vec4(0.4, 0.4, 0.3, 0.0);
     }
     float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
-    if(shadowmap1_pos.z - 0.0007 <= shadow_depth1 * 2 - 1) {
+    if(shadowmap1_pos.z <= shadow_depth1 * 2 - 1) {
         mult += vec4(0.2, 0.1, 0.0, 0.0);
     }
 
     frag_color *= mult;
 }
 )""";
-// position_in_shadowmap.x < -1.0 || position_in_shadowmap.x > 1.0 || position_in_shadowmap.y < -1.0 || position_in_shadowmap.y > 1.0 || position_in_shadowmap.z < -1.0 || position_in_shadowmap.z > 1.0
-
-/*const char* vss_raycast = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-void main() {
-    gl_Position = vec4(pos, 0.0, 1.0);
-}
-)""";
-
-const char* fss_raycast = R"""(
-#version 460 core
-out vec4 frag_color;
-
-layout(location = 0) uniform sampler2D tex;
-layout(location = 1) uniform ivec2 screen_size;
-layout(location = 2) uniform ivec2 light_pos;
-layout(location = 3) uniform int light_rad;
-
-float pi = 3.14159265358979323846;
-
-void main() {
-    float num_rays = floor(light_rad * pi * 2);
-    int pos = int((gl_FragCoord.x - 0.5) + ((gl_FragCoord.y - 0.5) * 128));
-    if(pos < num_rays) {
-        float theta = (pos / num_rays) * (pi * 2);
-        vec2 step = vec2(cos(theta), sin(theta));
-
-        float length = 0.0;
-
-        bool stop = false;
-        for(int i = 0; i < 256; i++) {
-            if(stop == false && i < light_rad) {
-                ivec2 step_pos = ivec2(floor(step.x * i + 0.5), floor(step.y * i + 0.5)) + light_pos;
-                vec4 color = texelFetch(tex, step_pos, 0);
-                if(color.x != 0.0) {
-                    stop = true;
-                } else {
-                    length++;
-                }
-            }
-        }
-
-        frag_color = vec4(length / 256, 0.0, 0.0, 1.0);
-    } else discard;
-}
-)""";
-
-const char* vss_light = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-void main() {
-    gl_Position = vec4(pos, 0.0, 1.0);
-}
-)""";
-
-const char* fss_light = R"""(
-#version 460 core
-out vec4 frag_color;
-
-layout(location = 0) uniform sampler2D ray_lengths;
-layout(location = 1) uniform ivec2 light_pos;
-layout(location = 2) uniform int light_rad;
-
-float pi = 3.14159265358979323846;
-
-void main() {
-    vec2 rel_pos = gl_FragCoord.xy - vec2(0.49, 0.49) - light_pos;
-    float squared_dist = rel_pos.x * rel_pos.x + rel_pos.y * rel_pos.y;
-    if(squared_dist <= light_rad * light_rad) {
-        float theta = atan(-rel_pos.y, -rel_pos.x) + pi;
-        int ray = int(theta * light_rad);
-        int ray_ycoord = ray / 128;
-        int ray_xcoord = ray - ray_ycoord * 128;
-
-        float length = texelFetch(ray_lengths, ivec2(ray_xcoord, ray_ycoord), 0).x * 256;
-
-        if(squared_dist <= length * length) {
-            float light = max(1.0 - float(squared_dist) / (light_rad * light_rad), 0.3125);
-            frag_color = vec4(light, light, light, 1.0);
-        } else {
-            frag_color = vec4(0.3125, 0.3125, 0.3125, 1.0);
-        }
-    } else discard;
-}
-)""";*/
 
 std::array<glm::vec2, 6> screen_vertices = {
     glm::vec2{-1, -1},
@@ -231,6 +143,43 @@ std::array<glm::vec2, 6> screen_vertices = {
     glm::vec2{-1, 1},
     glm::vec2{1, -1},
     glm::vec2{1, 1}
+};
+
+std::array<Vertex, 30> box_vertices {
+    Vertex({0, 0, 0}, {0, 0}, {15, 11}),
+    Vertex({1, 0, 0}, {16, 0}, {15, 11}),
+    Vertex({1, 0, 0.75}, {16, 12}, {15, 11}),
+    Vertex({0, 0, 0}, {0, 0}, {15, 11}),
+    Vertex({1, 0, 0.75}, {16, 12}, {15, 11}),
+    Vertex({0, 0, 0.75}, {0, 12}, {15, 11}),
+
+    Vertex({1, 0, 0}, {0, 0}, {15, 11}),
+    Vertex({1, 1, 0}, {16, 0}, {15, 11}),
+    Vertex({1, 1, 0.75}, {16, 12}, {15, 11}),
+    Vertex({1, 0, 0}, {0, 0}, {15, 11}),
+    Vertex({1, 1, 0.75}, {16, 12}, {15, 11}),
+    Vertex({1, 0, 0.75}, {0, 12}, {15, 11}),
+
+    Vertex({1, 1, 0}, {0, 0}, {15, 11}),
+    Vertex({0, 1, 0}, {16, 0}, {15, 11}),
+    Vertex({0, 1, 0.75}, {16, 12}, {15, 11}),
+    Vertex({1, 1, 0}, {0, 0}, {15, 11}),
+    Vertex({0, 1, 0.75}, {16, 12}, {15, 11}),
+    Vertex({1, 1, 0.75}, {0, 12}, {15, 11}),
+
+    Vertex({0, 1, 0}, {0, 0}, {15, 11}),
+    Vertex({0, 0, 0}, {16, 0}, {15, 11}),
+    Vertex({0, 0, 0.75}, {16, 12}, {15, 11}),
+    Vertex({0, 1, 0}, {0, 0}, {15, 11}),
+    Vertex({0, 0, 0.75}, {16, 12}, {15, 11}),
+    Vertex({0, 1, 0.75}, {0, 12}, {15, 11}),
+
+    Vertex({0, 0, 0.75}, {0, 12}, {15, 27}),
+    Vertex({1, 0, 0.75}, {16, 12}, {15, 27}),
+    Vertex({1, 1, 0.75}, {16, 28}, {15, 27}),
+    Vertex({0, 0, 0.75}, {0, 12}, {15, 27}),
+    Vertex({1, 1, 0.75}, {16, 28}, {15, 27}),
+    Vertex({0, 1, 0.75}, {0, 28}, {15, 27}),
 };
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -274,7 +223,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     core.reload_active_chunks = true;
 
     core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
-    core.fb_light.resize({core.screen_size.x, core.screen_size.y});
+    //core.fb_light.resize({core.screen_size.x, core.screen_size.y});
 }
 
 int main() {
@@ -317,9 +266,10 @@ int main() {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     // texture address array
-    std::array<const char*, 2> addresses = {
+    std::vector<const char*> addresses = {
         "res\\tiles.png",
-        "res\\player_spritesheet.png"
+        "res\\player_spritesheet.png",
+        "res\\box.png"
     };
 
     // core
@@ -338,12 +288,6 @@ int main() {
     Shader screen_shader;
     screen_shader.compile(vss_screen, fss_screen);
 
-    /*Shader raycast_shader;
-    raycast_shader.compile(vss_raycast, fss_raycast);
-
-    Shader light_shader;
-    light_shader.compile(vss_light, fss_light);*/
-
     time_t last_time = get_time();
     uint32_t delta_time;
 
@@ -361,17 +305,23 @@ int main() {
     screen_buffer.set_data(screen_vertices.data(), sizeof(glm::vec3) * screen_vertices.size());
     screen_buffer.set_attrib(0, 2, 2 * sizeof(float), 0);
 
+    Buffer box_buffer;
+    box_buffer.init();
+    box_buffer.set_data(box_vertices.data(), sizeof(Vertex) * 30);
+    box_buffer.set_attrib(0, 3, 7 * sizeof(float), 0);
+    box_buffer.set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
+    box_buffer.set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
+
     //
-    
-    glClearColor(0.0, 0.0, 0.0, 1.0);
-    framebuffer_size_callback(window, screen_size.x, screen_size.y);
+
+    glEnable(GL_DEPTH_TEST); 
+    glDepthFunc(GL_LEQUAL);
 
     int fps = 100;
     int delta_lim = 1000000000 / fps;
 
     while(game_running) {
-        glEnable(GL_DEPTH_TEST); 
-        glDepthFunc(GL_ALWAYS);
+        glEnable(GL_DEPTH_TEST);
         glfwPollEvents();
 
         // math
@@ -379,37 +329,36 @@ int main() {
         delta_time = current_time - last_time;
 
         if(delta_time >= delta_lim) {
+            glEnable(GL_POLYGON_OFFSET_FILL);
             last_time = current_time;
 
             core.math(delta_time);
 
             //render
-            core.light_depth_buffer0.bind(1536, 1536);
+            core.light_depth_buffer0.bind(2048, 2048);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            core.light_depth_buffer1.bind(1536, 1536);
+            core.light_depth_buffer1.bind();
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
-            GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-            glDrawBuffers(2, buffers);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             //get matrix
-            float w = float(screen_size.x / 2) / scale;
-            float h = float(screen_size.y / 2) / scale;
-            glm::mat4 pv_matrix = /*glm::perspective(100, , 0.5, 32.0);*/glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
+            float w = 0.5f * screen_size.x / scale;
+            float h = 0.5f * screen_size.y / scale;
+
+            glm::mat4 pv_matrix = glm::ortho(-w, w, -h, h, 0.0f, 8.0f);
             pv_matrix *= core.camera.get_view_matrix();
             glm::mat4 flatten_mat = glm::identity<glm::mat4>();
             flatten_mat[2][1] = 1;
             pv_matrix *= flatten_mat;
 
             glm::mat4 pv_mat_sun0 = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, -20.0f, 100.0f);
-            pv_mat_sun0 *= core.sun_camera0.get_view_matrix_sun(glm::dvec3(core.player.position, 0.0));
-
             glm::mat4 pv_mat_sun1 = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, -20.0f, 100.0f);
-            pv_mat_sun1 *= core.sun_camera1.get_view_matrix_sun(glm::dvec3(core.player.position, 0.0));
+            pv_mat_sun0 *= core.sun_camera0.get_view_matrix(glm::dvec3(core.player.position, 0.0));
+            pv_mat_sun1 *= core.sun_camera1.get_view_matrix(glm::dvec3(core.player.position, 0.0));
 
-            // draw
+            // draw chunks
             shader.use();
             core.textures[0].bind(0, 1);
 
@@ -423,16 +372,18 @@ int main() {
                     if(chunk.vertex_status == 2) { 
                         chunk.buffer.bind();
 
+                        glPolygonOffset(0, 0);
                         core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
                         glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
                         glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
 
-                        // render to shadowmapS
-                        core.light_depth_buffer0.bind(1536, 1536);
+                        // render to shadowmaps
+                        glPolygonOffset(1, 1);
+                        core.light_depth_buffer0.bind(2048, 2048);
                         glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun0[0][0]);
                         glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
 
-                        core.light_depth_buffer1.bind(1536, 1536);
+                        core.light_depth_buffer1.bind();
                         glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun1[0][0]);
                         glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
 
@@ -448,50 +399,40 @@ int main() {
                 }
             }
             
+            glPolygonOffset(0, 0);
             core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
             core.player.render(player_shader, pv_matrix);
 
-            core.light_depth_buffer0.bind(1536, 1536);
+            glPolygonOffset(1, 1);
+            core.light_depth_buffer0.bind(2048, 2048);
             core.player.render(player_shader, pv_mat_sun0);
 
-            core.light_depth_buffer1.bind(1536, 1536);
+            core.light_depth_buffer1.bind();
             core.player.render(player_shader, pv_mat_sun1);
 
-            // render shadowmap
+            // box
 
-
-
+            glPolygonOffset(0, 0);
+            glm::mat4 box_transform = glm::translate(glm::vec3{5.0, 6.0, 0.0});
+            box_buffer.bind();
+            glUniformMatrix4fv(1, 1, GL_FALSE, &box_transform[0][0]);
+            glUniform2i(2, 0.0, 0.0);
+            core.textures[2].bind(0, 3);
             
-            //glm::ivec2 position((0 - core.camera.pos.x * scale) + screen_size.x / 2, (0 - core.camera.pos.y * scale) + screen_size.y / 2);
-            //glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
-
-            // raycast
-            /*core.framebuffer_light.bind();
-
-            raycast_shader.use();
-            core.framebuffer.color_tex[1].bind(0, 0);
-            glUniform2iv(1, 1, &screen_size[0]);
-            glUniform2iv(2, 1, &position[0]);
-            glUniform1i(3, 5 * scale);
-            screen_buffer.bind();
-            glDrawArrays(GL_TRIANGLES, 0, 6);*/
-            //
-
-            // draw light
-            /*core.fb_light.bind();
-            glClearColor(0.3125, 0.3125, 0.3125, 1.0);
-            glClear(GL_COLOR_BUFFER_BIT);
-            glClearColor(0.0, 0.0, 0.0, 1.0);
-
-            light_shader.use();
-            core.framebuffer_light.color_tex[0].bind(0, 0);
-            glUniform2iv(1, 1, &position[0]);
-            glUniform1i(2, 5 * scale);
-
-            screen_buffer.bind();
-            glDrawArrays(GL_TRIANGLES, 0, 6);*/
-            //
+            core.framebuffer.bind(core.screen_size.x, core.screen_size.y);
+            glUniformMatrix4fv(0, 1, GL_FALSE, &pv_matrix[0][0]);
+            glDrawArrays(GL_TRIANGLES, 0, 30);
             
+            glPolygonOffset(1, 1);
+            core.light_depth_buffer0.bind(2048, 2048);
+            glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun0[0][0]);
+            glDrawArrays(GL_TRIANGLES, 0, 30);
+
+            core.light_depth_buffer1.bind();
+            glUniformMatrix4fv(0, 1, GL_FALSE, &pv_mat_sun1[0][0]);
+            glDrawArrays(GL_TRIANGLES, 0, 30);
+
+
 
             // render framebuffer texture
             glDisable(GL_DEPTH_TEST); 
@@ -511,7 +452,6 @@ int main() {
             glUniformMatrix4fv(5, 1, GL_FALSE, &pv_mat_sun0[0][0]);
             glUniformMatrix4fv(6, 1, GL_FALSE, &pv_mat_sun1[0][0]);
             glUniform2iv(7, 1, &screen_size[0]);
-            glUniform2f(8, -1.0f, 1.0f);
 
             glDrawArrays(GL_TRIANGLES, 0, 6);
 

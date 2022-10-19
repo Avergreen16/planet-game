@@ -1,5 +1,52 @@
 g++ src/main.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\main
 
+/*const char* vss_raycast = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+void main() {
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)""";
+
+const char* fss_raycast = R"""(
+#version 460 core
+out vec4 frag_color;
+
+layout(location = 0) uniform sampler2D tex;
+layout(location = 1) uniform ivec2 screen_size;
+layout(location = 2) uniform ivec2 light_pos;
+layout(location = 3) uniform int light_rad;
+
+float pi = 3.14159265358979323846;
+
+void main() {
+    float num_rays = floor(light_rad * pi * 2);
+    int pos = int((gl_FragCoord.x - 0.5) + ((gl_FragCoord.y - 0.5) * 128));
+    if(pos < num_rays) {
+        float theta = (pos / num_rays) * (pi * 2);
+        vec2 step = vec2(cos(theta), sin(theta));
+
+        float length = 0.0;
+
+        bool stop = false;
+        for(int i = 0; i < 256; i++) {
+            if(stop == false && i < light_rad) {
+                ivec2 step_pos = ivec2(floor(step.x * i + 0.5), floor(step.y * i + 0.5)) + light_pos;
+                vec4 color = texelFetch(tex, step_pos, 0);
+                if(color.x != 0.0) {
+                    stop = true;
+                } else {
+                    length++;
+                }
+            }
+        }
+
+        frag_color = vec4(length / 256, 0.0, 0.0, 1.0);
+    } else discard;
+}
+)""";
+
 const char* vss_light = R"""(
 #version 460 core
 layout(location = 0) in vec2 pos;
@@ -14,26 +61,69 @@ const char* fss_light = R"""(
 out vec4 frag_color;
 
 layout(location = 0) uniform sampler2D ray_lengths;
-layout(location = 2) uniform ivec2 light_pos;
-layout(location = 3) uniform int light_rad;
+layout(location = 1) uniform ivec2 light_pos;
+layout(location = 2) uniform int light_rad;
 
 float pi = 3.14159265358979323846;
 
 void main() {
-    vec2 rel_pos = gl_FragCoord.xy - light_pos;
+    vec2 rel_pos = gl_FragCoord.xy - vec2(0.49, 0.49) - light_pos;
     float squared_dist = rel_pos.x * rel_pos.x + rel_pos.y * rel_pos.y;
     if(squared_dist <= light_rad * light_rad) {
-        float theta = atan(rel_pos.y, rel_pos.x) + pi;
+        float theta = atan(-rel_pos.y, -rel_pos.x) + pi;
         int ray = int(theta * light_rad);
-
         int ray_ycoord = ray / 128;
         int ray_xcoord = ray - ray_ycoord * 128;
 
         float length = texelFetch(ray_lengths, ivec2(ray_xcoord, ray_ycoord), 0).x * 256;
 
         if(squared_dist <= length * length) {
-            frag_color = vec4(1.0, 1.0, 1.0, 1.0);
+            float light = max(1.0 - float(squared_dist) / (light_rad * light_rad), 0.3125);
+            frag_color = vec4(light, light, light, 1.0);
+        } else {
+            frag_color = vec4(0.3125, 0.3125, 0.3125, 1.0);
         }
     } else discard;
 }
-)""";
+)""";*/
+
+// renderbuffer for depth
+/*glGenRenderbuffers(1, &depth_buffer);
+glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
+glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
+
+if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
+else std::cout << "Framebuffer NOT complete\n";*/
+
+raytrace
+
+//glm::ivec2 position((0 - core.camera.pos.x * scale) + screen_size.x / 2, (0 - core.camera.pos.y * scale) + screen_size.y / 2);
+//glm::ivec2 mouse_pos_yinv(core.mouse_pos.x, core.screen_size.y - core.mouse_pos.y);
+
+// raycast
+/*core.framebuffer_light.bind();
+
+raycast_shader.use();
+core.framebuffer.color_tex[1].bind(0, 0);
+glUniform2iv(1, 1, &screen_size[0]);
+glUniform2iv(2, 1, &position[0]);
+glUniform1i(3, 5 * scale);
+screen_buffer.bind();
+glDrawArrays(GL_TRIANGLES, 0, 6);*/
+//
+
+// draw light
+/*core.fb_light.bind();
+glClearColor(0.3125, 0.3125, 0.3125, 1.0);
+glClear(GL_COLOR_BUFFER_BIT);
+glClearColor(0.0, 0.0, 0.0, 1.0);
+
+light_shader.use();
+core.framebuffer_light.color_tex[0].bind(0, 0);
+glUniform2iv(1, 1, &position[0]);
+glUniform1i(2, 5 * scale);
+
+screen_buffer.bind();
+glDrawArrays(GL_TRIANGLES, 0, 6);*/
+//

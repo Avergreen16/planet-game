@@ -75,7 +75,13 @@ struct Shader {
         GLint compile_check;
         glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &compile_check);
         if(compile_check == GL_FALSE) {
-            std::cout << "ERROR: Vertex shader failed to compile.\n";
+            int log_size = 0;
+            glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &log_size);
+
+            std::vector<char> error_log(log_size);
+	        glGetShaderInfoLog(vertex_shader, log_size, &log_size, &error_log[0]);
+            std::cout << "ERROR: Vertex shader failed to compile:\n" << error_log.data() << "\n";
+
             return false;
         }
 
@@ -86,7 +92,6 @@ struct Shader {
         // check if fragment shader compiled correctly
         glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &compile_check);
         if(compile_check == GL_FALSE) {
-
             int log_size = 0;
             glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &log_size);
 
@@ -162,7 +167,6 @@ struct Framebuffer {
     GLuint id;
     Texture color_tex[num_color_buffers];
     Texture depth_tex;
-    //GLuint depth_buffer;
     bool initialized = false;
 
     void init(int width, int height) {
@@ -199,14 +203,12 @@ struct Framebuffer {
 
         glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex.id, 0);
 
-        // renderbuffer for depth
-        /*glGenRenderbuffers(1, &depth_buffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
 
-        if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
-        else std::cout << "Framebuffer NOT complete\n";*/
+        GLenum buffers[num_color_buffers];
+        for(int i = 0; i < num_color_buffers; ++i) {
+            buffers[i] = GL_COLOR_ATTACHMENT0 + i;
+        }
+        glDrawBuffers(num_color_buffers, buffers);
     }
     
     void bind(int width, int height) {
@@ -257,8 +259,6 @@ struct Framebuffer_depth {
         depth_tex.size = {width, height};
 
         glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex.id, 0);
-
-        // renderbuffer for depth
 
         if(glCheckFramebufferStatus(id) == GL_FRAMEBUFFER_COMPLETE) std::cout << "framebuffer complete\n";
         else std::cout << "Framebuffer NOT complete\n";

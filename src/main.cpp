@@ -123,26 +123,30 @@ void main() {
     frag_color = color;
     vec4 normal = texture(normal_map, (tex_coord + 1) / 2);
 
-    if(normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0) {
-        vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * 2 - 1, 1.0);
-        vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
-        vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
+    
+    vec4 world_space_pos = inverse_matrix * vec4(xy_pos.x * 2 - 1, xy_pos.y * 2 - 1, texture(tex_depth, xy_pos).x * 2 - 1, 1.0);
+    vec4 shadowmap0_pos = shadow_matrix0 * world_space_pos;
+    vec4 shadowmap1_pos = shadow_matrix1 * world_space_pos;
 
-        vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
+    vec4 mult = vec4(0.4, 0.4, 0.3, 1.0);
 
-        float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
-        if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
-            mult += vec4(0.4, 0.4, 0.3, 0.0);
+    float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
+    if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
+        if(!(normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)) {
+            frag_color *= vec4(0.6, 0.6, 0.5, 1.0) + vec4(0.4, 0.3, 0.1, 1.0) * (max(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0));
+
+            return;
+        } else {
+            mult += vec4(0.4, 0.4, 0.3, 1.0);
         }
-        float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
-        if(shadowmap1_pos.z <= shadow_depth1 * 2 - 1) {
-            mult += vec4(0.2, 0.1, 0.0, 0.0);
-        }
-
-        frag_color *= mult;
-    } else {
-        frag_color *= vec4(0.5, 0.5, 0.4, 1.0) + vec4(0.5, 0.4, 0.2, 1.0) * (min(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0) + 1.0);
     }
+
+    float shadow_depth1 = texture(shadowmap1, (shadowmap1_pos.xy + 1) / 2).x;
+    if(shadowmap1_pos.z <= shadow_depth1 * 2 - 1) {
+        mult += vec4(0.2, 0.1, 0.0, 0.0);
+    }
+
+    frag_color *= mult;
 }
 )""";
 
@@ -197,6 +201,9 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if(action == GLFW_PRESS) {
         if(core.keymap.contains(key)) {
             core.keymap[key] = true;
+        }
+        else if(key == GLFW_KEY_T) {
+            std::cout << int(core.player.position.x) << " " << int(core.player.position.y) << "\n";
         }
     } else if(action == GLFW_RELEASE) {
         if(core.keymap.contains(key)) {
@@ -463,8 +470,8 @@ int main() {
             glUniformMatrix4fv(5, 1, GL_FALSE, &pv_mat_sun0[0][0]);
             glUniformMatrix4fv(6, 1, GL_FALSE, &pv_mat_sun1[0][0]);
             glUniform2iv(7, 1, &screen_size[0]);
-            glm::vec3 sun_pos(core.sun_camera0.pos - glm::dvec3(core.player.position, 0.0));
-            sun_pos.y = -sun_pos.y;
+            glm::vec3 sun_pos(core.sun_camera0.pos - glm::dvec3(core.player.position, 0.0));//
+            //sun_pos.y *= -1;// glm::vec2(core.mouse_pos - core.screen_size / 2) / 500.0f, fabs(core.mouse_pos.y - core.screen_size.y) / 200.0f
             glUniform3fv(8, 1, &sun_pos[0]);
 
             glDrawArrays(GL_TRIANGLES, 0, 6);

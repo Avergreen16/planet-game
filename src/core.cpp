@@ -13,8 +13,14 @@ struct Camera {
         this->pos = pos;
     }
 
-    glm::mat4 get_view_matrix() {
-        return glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 get_view_matrix(glm::ivec2 screen_size, int scale) {
+        double w = 0.5 * screen_size.x / scale;
+        double h = 0.5 * screen_size.y / scale;
+
+        glm::mat<4, 4, glm::f64, glm::packed_highp> skew_mat = glm::identity<glm::mat<4, 4, glm::f64, glm::packed_highp>>();
+        skew_mat[2][1] = 1.0;
+
+        return glm::ortho(-w, w, -h, h, 0.0, 8.0) * glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f)) * skew_mat;
     }
 };
 
@@ -28,7 +34,7 @@ struct Light_camera {
     }
 
     glm::mat4 get_view_matrix(glm::dvec3 player_pos) {
-        return glm::lookAt(pos, player_pos, glm::dvec3(0.0f, 0.0f, 1.0f));
+        return glm::ortho(-35.0, 35.0, -35.0, 35.0, -20.0, 100.0) * glm::lookAt(pos, player_pos, glm::dvec3(0.0, 0.0, 1.0));
     }
 };
 
@@ -91,8 +97,8 @@ struct Core {
 
     Light_camera sun_camera0;
     Light_camera sun_camera1;
-    Framebuffer_depth light_depth_buffer0;
-    Framebuffer_depth light_depth_buffer1;
+    Framebuffer_depth sun_buffer0;
+    Framebuffer_depth sun_buffer1;
 
     glm::ivec2 mouse_pos;
 
@@ -121,6 +127,8 @@ struct Core {
     };
 
     std::vector<Texture> textures;
+    std::vector<Shader> shaders;
+    std::vector<Buffer> buffers;
 
     glm::ivec2& screen_size;
     int& scale;
@@ -129,8 +137,8 @@ struct Core {
 
     Core(bool& game_running, glm::ivec2& screen_size, int& scale) : game_running(game_running), screen_size(screen_size), scale(scale) {
         framebuffer.init(screen_size.x, screen_size.y);
-        light_depth_buffer0.init(2048, 2048);
-        light_depth_buffer1.init(2048, 2048);
+        sun_buffer0.init(2048, 2048);
+        sun_buffer1.init(2048, 2048);
 
         mouse_pos = screen_size / 2;
 
@@ -140,10 +148,17 @@ struct Core {
         //fb_light.init(screen_size.x, screen_size.y);
     };
 
-    void create_textures(std::vector<const char*>& input) {
-        textures.resize(input.size());
-        for(int i = 0; i < input.size(); ++i) {
-            textures[i].load(input[i]);
+    void create_textures(std::vector<const char*>& filepaths) {
+        textures.resize(filepaths.size());
+        for(int i = 0; i < filepaths.size(); ++i) {
+            textures[i].load(filepaths[i]);
+        }
+    }
+
+    void create_shaders(std::vector<const char*>& shader_vec) {
+        shaders.resize(shader_vec.size() / 2);
+        for(int i = 0; i < shader_vec.size() / 2; i++) {
+            shaders[i].compile(shader_vec[i * 2], shader_vec[i * 2 + 1]);
         }
     }
 
@@ -212,9 +227,118 @@ struct Core {
         }
     }
 
-    //void render() {
+    void render() {
+        framebuffer.bind(screen_size.x, screen_size.y);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        sun_buffer0.bind(2048, 2048);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        sun_buffer1.bind();
+        glClear(GL_DEPTH_BUFFER_BIT);
 
-    //}
+        glm::mat4 camera_matrix = camera.get_view_matrix(screen_size, scale);
+
+        glm::mat4 sun_matrix0 = sun_camera0.get_view_matrix(glm::dvec3(player.position, 0.0));
+        glm::mat4 sun_matrix1 = sun_camera1.get_view_matrix(glm::dvec3(player.position, 0.0));
+
+        // this is to stop too many chunks from being loaded into the gpu per frame and lagging the game
+        int chunks_loaded_vertices = 0;
+        shaders[0].use();
+        textures[0].bind(0, 1);
+
+        for(uint64_t& key : active_chunks) {
+            if(loaded_chunks.contains(key)) {
+                Chunk& chunk = loaded_chunks[key];
+                // if chunk vertices are in buffer
+                if(chunk.vertex_status == 2) { 
+                    chunk.buffer.bind();
+
+                    glPolygonOffset(0, 0);
+                    framebuffer.bind(screen_size.x, screen_size.y);
+                    glUniformMatrix4fv(0, 1, GL_FALSE, &camera_matrix[0][0]);
+                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                    // render to shadowmaps
+                    glPolygonOffset(1, 1);
+
+                    sun_buffer0.bind(2048, 2048);
+                    glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix0[0][0]);
+                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                    sun_buffer1.bind();
+                    glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix1[0][0]);
+                    glDrawArrays(GL_TRIANGLES, 0, chunk.vertex_count);
+
+                // if vertices have been generated but not loaded
+                } else if(chunk.vertex_status == 1 && chunks_loaded_vertices < 5) {
+                    chunk.load_mesh();
+                    ++chunks_loaded_vertices;
+                // if vertices haven't been generated
+                } else if(chunk.vertex_status == 0) {
+                    chunk.vertex_status = 3; // stops the key from being inserted into the queue more that once
+                    chunk_update_queue.push(key);
+                }
+            }
+        }
+
+        glPolygonOffset(0, 0);
+        framebuffer.bind(screen_size.x, screen_size.y);
+        player.render(shaders[1], camera_matrix);
+
+        glPolygonOffset(1, 1);
+        sun_buffer0.bind(2048, 2048);
+        player.render(shaders[1], sun_matrix0);
+
+        sun_buffer1.bind();
+        player.render(shaders[1], sun_matrix1);
+
+
+        // box
+        glPolygonOffset(0, 0);
+        glm::mat4 box_transform = glm::translate(glm::vec3{5.0, 6.0, 0.0});
+        buffers[1].bind();
+        glUniformMatrix4fv(1, 1, GL_FALSE, &box_transform[0][0]);
+        glUniform2i(2, 0.0, 0.0);
+        textures[2].bind(0, 3);
+        
+        framebuffer.bind(screen_size.x, screen_size.y);
+        glUniformMatrix4fv(0, 1, GL_FALSE, &camera_matrix[0][0]);
+        glDrawArrays(GL_TRIANGLES, 0, 30);
+        
+        glPolygonOffset(1, 1);
+        sun_buffer0.bind(2048, 2048);
+        glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix0[0][0]);
+        glDrawArrays(GL_TRIANGLES, 0, 30);
+
+        sun_buffer1.bind();
+        glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix1[0][0]);
+        glDrawArrays(GL_TRIANGLES, 0, 30);
+
+        // render screen w/ shadows
+        glPolygonOffset(0, 0);
+
+        glDisable(GL_DEPTH_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, screen_size.x, screen_size.y);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        shaders[2].use();
+        buffers[0].bind();
+        framebuffer.color_tex[0].bind(0, 0);
+        framebuffer.depth_tex.bind(1, 1);
+        sun_buffer0.depth_tex.bind(2, 2);
+        sun_buffer1.depth_tex.bind(3, 3);
+        framebuffer.color_tex[1].bind(4, 9);
+
+        glm::mat4 inverse_matrix = glm::inverse(camera_matrix);
+        glUniformMatrix4fv(4, 1, GL_FALSE, &inverse_matrix[0][0]);
+        glUniformMatrix4fv(5, 1, GL_FALSE, &sun_matrix0[0][0]);
+        glUniformMatrix4fv(6, 1, GL_FALSE, &sun_matrix1[0][0]);
+        glUniform2iv(7, 1, &screen_size[0]);
+        glm::vec3 sun_pos(sun_camera0.pos - glm::dvec3(player.position, 0.0));
+        glUniform3fv(8, 1, &sun_pos[0]);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
 };
 
 void Player::tick(Core& core, uint32_t delta_time) {

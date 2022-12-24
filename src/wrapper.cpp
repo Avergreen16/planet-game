@@ -27,11 +27,30 @@ struct Buffer {
     GLuint vertex_buffer;
     bool initialized = false;
 
+    Buffer(Buffer& a) {
+        vertex_array = a.vertex_array;
+        vertex_buffer = a.vertex_buffer;
+        initialized = true;
+
+        a.vertex_array = 0;
+        a.vertex_buffer = 0;
+        a.initialized = false;
+    }
+    
+    Buffer() = default;
+
+    Buffer(Buffer&& a) {
+        vertex_array = a.vertex_array;
+        vertex_buffer = a.vertex_buffer;
+        initialized = true;
+
+        a.vertex_array = 0;
+        a.vertex_buffer = 0;
+        a.initialized = false;
+    };
+
     void init() {
-        if(initialized == true) {
-            glDeleteBuffers(1, &vertex_buffer);
-            glDeleteBuffers(1, &vertex_array);
-        } else initialized = true;
+        initialized = true;
 
         glGenVertexArrays(1, &vertex_array);
         glBindVertexArray(vertex_array);
@@ -41,6 +60,7 @@ struct Buffer {
     }
 
     void set_data(void* ptr, size_t size_bytes, GLenum usage = GL_STATIC_DRAW) {
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
         glBufferData(GL_ARRAY_BUFFER, size_bytes, ptr, usage);
     }
 

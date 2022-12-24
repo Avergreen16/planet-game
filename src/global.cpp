@@ -6,7 +6,7 @@
 #include <vector>
 #include <iostream>
 #include <array>
-#include <unordered_map>
+#include <map>
 #include <queue>
 #include <thread>
 
@@ -17,4 +17,11 @@
 
 #include "PerlinNoise.hpp"
 #include "glm\glm.hpp"
+
+#ifdef USE_2D
+#include "glm\gtx\matrix_transform_2d.hpp"
+#endif
+
+#ifndef USE_2D
 #include "glm\gtx\transform.hpp"
+#endif

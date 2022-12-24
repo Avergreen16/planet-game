@@ -13,12 +13,13 @@ struct Camera {
         this->pos = pos;
     }
 
-    glm::mat4 get_view_matrix(glm::ivec2 screen_size, int scale) {
+    glm::mat4 get_view_matrix(glm::ivec2 screen_size, int scale, int skew_pixels) {
         double w = 0.5 * screen_size.x / scale;
         double h = 0.5 * screen_size.y / scale;
 
         glm::mat<4, 4, glm::f64, glm::packed_highp> skew_mat = glm::identity<glm::mat<4, 4, glm::f64, glm::packed_highp>>();
-        skew_mat[2][1] = 1.0;
+        skew_mat[1][1] = 0.75;//0.9375;
+        skew_mat[2][1] = 0.75;//0.9375;
 
         return glm::ortho(-w, w, -h, h, 0.0, 8.0) * glm::lookAt(pos, pos - glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0f, 1.0f, 0.0f)) * skew_mat;
     }
@@ -34,17 +35,17 @@ struct Light_camera {
     }
 
     glm::mat4 get_view_matrix(glm::dvec3 player_pos) {
-        return glm::ortho(-35.0, 35.0, -35.0, 35.0, -20.0, 100.0) * glm::lookAt(pos, player_pos, glm::dvec3(0.0, 0.0, 1.0));
+        return glm::ortho(-35.0, 35.0, -35.0, 35.0, -20.0, 100.0) * glm::lookAt(pos + player_pos, player_pos, glm::dvec3(0.0, 0.0, 1.0));
     }
 };
 
 std::array<Vertex, 6> player_vertices = {
     Vertex{{-1, 0, 0}, {0, 0}, {31, 31}},
     Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
-    Vertex{{-1, 0, 2}, {0, 32}, {31, 31}},
-    Vertex{{-1, 0, 2}, {0, 32}, {31, 31}},
+    Vertex{{-1, 0, 2 + (2.0 / 3)}, {0, 32}, {31, 31}},
+    Vertex{{-1, 0, 2 + (2.0 / 3)}, {0, 32}, {31, 31}},
     Vertex{{1, 0, 0}, {32, 0}, {31, 31}},
-    Vertex{{1, 0, 2}, {32, 32}, {31, 31}}
+    Vertex{{1, 0, 2 + (2.0 / 3)}, {32, 32}, {31, 31}}
 };
 
 enum direction:uint16_t {NORTH, EAST, SOUTH, WEST};
@@ -123,7 +124,8 @@ struct Core {
         {GLFW_KEY_SPACE, false},
         {GLFW_KEY_F11, false},
         {GLFW_KEY_UP, false},
-        {GLFW_KEY_DOWN, false}
+        {GLFW_KEY_DOWN, false},
+        {GLFW_KEY_T, false}
     };
 
     std::vector<Texture> textures;
@@ -132,6 +134,7 @@ struct Core {
 
     glm::ivec2& screen_size;
     int& scale;
+    int skew_pixels = 16;
     
     bool& game_running;
 
@@ -217,6 +220,7 @@ struct Core {
         mouse_offset /= screen_size;
 
         camera.pos = glm::dvec3(player.visual_position + glm::dvec2(0.0, 0.9375) + glm::dvec2(mouse_offset.x, -mouse_offset.y) * (48.0 / scale), 8.0);
+        camera.pos = glm::dvec3(round(camera.pos.x * 16) / 16, round(camera.pos.y * 16) / 16, 8.0);
 
         if(keymap[GLFW_KEY_F11]) {
             std::vector<uint8_t> vector(screen_size.x * screen_size.y * 3);
@@ -224,6 +228,10 @@ struct Core {
 
             stbi__flip_vertically_on_write = true;
             stbi_write_png("output\\screenshot.png", screen_size.x, screen_size.y, 3, vector.data(), screen_size.x * 3);
+        }
+
+        if(keymap[GLFW_KEY_T]) {
+            std::cin >> skew_pixels;
         }
     }
 
@@ -235,7 +243,7 @@ struct Core {
         sun_buffer1.bind();
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 camera_matrix = camera.get_view_matrix(screen_size, scale);
+        glm::mat4 camera_matrix = camera.get_view_matrix(screen_size, scale, skew_pixels);
 
         glm::mat4 sun_matrix0 = sun_camera0.get_view_matrix(glm::dvec3(player.position, 0.0));
         glm::mat4 sun_matrix1 = sun_camera1.get_view_matrix(glm::dvec3(player.position, 0.0));
@@ -293,7 +301,18 @@ struct Core {
 
 
         // box
+        framebuffer.bind(screen_size.x, screen_size.y);
         glPolygonOffset(0, 0);
+        shaders[4].use();
+        buffers[2].bind();
+        glm::mat4 box2_transform = glm::translate(glm::vec3{7.0, 6.0, 0.0});
+        glUniformMatrix4fv(1, 1, GL_FALSE, &box2_transform[0][0]);
+        glUniformMatrix4fv(0, 1, GL_FALSE, &camera_matrix[0][0]);
+        textures[2].bind(0, 2);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        shaders[1].use();
+
+        
         glm::mat4 box_transform = glm::translate(glm::vec3{5.0, 6.0, 0.0});
         buffers[1].bind();
         glUniformMatrix4fv(1, 1, GL_FALSE, &box_transform[0][0]);
@@ -302,16 +321,16 @@ struct Core {
         
         framebuffer.bind(screen_size.x, screen_size.y);
         glUniformMatrix4fv(0, 1, GL_FALSE, &camera_matrix[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, 30);
+        glDrawArrays(GL_TRIANGLES, 0, 60);
         
         glPolygonOffset(1, 1);
         sun_buffer0.bind(2048, 2048);
         glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix0[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, 30);
+        glDrawArrays(GL_TRIANGLES, 0, 90);
 
         sun_buffer1.bind();
         glUniformMatrix4fv(0, 1, GL_FALSE, &sun_matrix1[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, 30);
+        glDrawArrays(GL_TRIANGLES, 0, 90);
 
         // render screen w/ shadows
         glPolygonOffset(0, 0);
@@ -319,9 +338,11 @@ struct Core {
         glDisable(GL_DEPTH_TEST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, screen_size.x, screen_size.y);
+        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glViewport(0, 0, screen_size.x, screen_size.y);
         glClear(GL_COLOR_BUFFER_BIT);
-
-        shaders[2].use();
+        /**/
+        shaders[3].use();
         buffers[0].bind();
         framebuffer.color_tex[0].bind(0, 0);
         framebuffer.depth_tex.bind(1, 1);
@@ -334,8 +355,14 @@ struct Core {
         glUniformMatrix4fv(5, 1, GL_FALSE, &sun_matrix0[0][0]);
         glUniformMatrix4fv(6, 1, GL_FALSE, &sun_matrix1[0][0]);
         glUniform2iv(7, 1, &screen_size[0]);
-        glm::vec3 sun_pos(sun_camera0.pos - glm::dvec3(player.position, 0.0));
+        glm::vec3 sun_pos(sun_camera0.pos * 65536.0 - glm::dvec3(player.position, 0.0));
         glUniform3fv(8, 1, &sun_pos[0]);
+
+        //shaders[2].use();
+        //buffers[0].bind();
+        //framebuffer.depth_tex.bind();
+
+        glm::rotate()
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }

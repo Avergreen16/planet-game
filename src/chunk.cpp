@@ -37,19 +37,20 @@ struct Chunk {
 
     void generate_mesh() {
         vertices.clear();
-        vertices.resize(1536);
+        //vertices.resize(1536);
+        int grass_counter = 0;
         for(int x = 0; x < 16; x++) {
             for(int y = 0; y < 16; y++) {
-                int start_index = (x + y * 16) * 6;
+                int start_index = (x + y * 16) * 6 + grass_counter * 6;
                 glm::vec3 position(x + pos.x * 16, y + pos.y * 16, 0);
                 glm::vec2 tex = tiles[x + y * 16].tex;
                 glm::vec2 tex_lim = tex + glm::vec2(15.0f, 15.0f);
-                vertices[start_index] = Vertex(tile_pos[0] + position, tex + glm::vec2(0.0f, 0.0f), tex_lim);
-                vertices[start_index + 1] = Vertex(tile_pos[1] + position, tex + glm::vec2(16.0f, 0.0f), tex_lim);
-                vertices[start_index + 2] = Vertex(tile_pos[2] + position, tex + glm::vec2(0.0f, 16.0f), tex_lim);
-                vertices[start_index + 3] = Vertex(tile_pos[2] + position, tex + glm::vec2(0.0f, 16.0f), tex_lim);
-                vertices[start_index + 4] = Vertex(tile_pos[1] + position, tex + glm::vec2(16.0f, 0.0f), tex_lim);
-                vertices[start_index + 5] = Vertex(tile_pos[3] + position, tex + glm::vec2(16.0f, 16.0f), tex_lim);
+                vertices.push_back(Vertex(tile_pos[0] + position, tex + glm::vec2(0.0f, 0.0f), tex_lim));
+                vertices.push_back(Vertex(tile_pos[1] + position, tex + glm::vec2(16.0f, 0.0f), tex_lim));
+                vertices.push_back(Vertex(tile_pos[2] + position, tex + glm::vec2(0.0f, 16.0f), tex_lim));
+                vertices.push_back(Vertex(tile_pos[2] + position, tex + glm::vec2(0.0f, 16.0f), tex_lim));
+                vertices.push_back(Vertex(tile_pos[1] + position, tex + glm::vec2(16.0f, 0.0f), tex_lim));
+                vertices.push_back(Vertex(tile_pos[3] + position, tex + glm::vec2(16.0f, 16.0f), tex_lim));
             }
         }
         vertex_status = 1;

@@ -98,6 +98,22 @@ void main() {
 const char* fs_screen = R"""(
 #version 460 core
 out vec4 frag_color;
+in vec2 tex_coord;
+
+layout(location = 0) uniform sampler2D tex;
+
+void main() {
+    vec4 color = texture(tex, (tex_coord + 1) / 2);
+    if(color.x != 1.0) {
+        float col_x = color.x - (1.0 / 256);
+        frag_color = vec4(col_x, col_x, col_x, 1.0);
+    }
+}
+)""";
+
+const char* fs_shadow = R"""(
+#version 460 core
+out vec4 frag_color;
 
 in vec2 tex_coord;
 
@@ -133,7 +149,7 @@ void main() {
     float shadow_depth0 = texture(shadowmap0, (shadowmap0_pos.xy + 1) / 2).x;
     if(shadowmap0_pos.z <= shadow_depth0 * 2 - 1) {
         if(!(normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)) {
-            frag_color *= vec4(0.4, 0.4, 0.3, 1.0) + vec4(0.6, 0.5, 0.3, 1.0) * (max(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0));
+            frag_color *= vec4(0.55, 0.55, 0.45, 1.0) + vec4(0.45, 0.35, 0.15, 1.0) * (max(dot(normalize(sun_pos), normalize(normal.xyz - vec3(0.5, 0.5, 0.5))), 0.0));
 
             return;
         } else {
@@ -150,6 +166,40 @@ void main() {
 }
 )""";
 
+const char* vs_pix = R"""(
+#version 460 core
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec2 _tex_coord;
+layout(location = 2) in vec2 _tex_coord_depth;
+
+out vec2 tex_coord;
+out vec2 tex_coord_depth;
+
+layout(location = 0) uniform mat4 pv_mat;
+layout(location = 1) uniform mat4 trans_mat;
+
+void main() {
+    tex_coord = _tex_coord;
+    tex_coord_depth = _tex_coord_depth;
+    gl_Position = pv_mat * (trans_mat * vec4(pos, 1.0));
+}
+)""";
+
+const char* fs_pix = R"""(
+#version 460 core
+out vec4 frag_color;
+in vec2 tex_coord;
+in vec2 tex_coord_depth;
+
+layout(location = 2) uniform sampler2D tex;
+
+void main() {
+    frag_color = texelFetch(tex, ivec2(tex_coord), 0);
+    if(frag_color.w == 0.0) discard;
+    gl_FragDepth = texelFetch(tex, ivec2(tex_coord_depth), 0).x - (1.0 / 64);
+}
+)""";
+
 std::array<glm::vec2, 6> screen_vertices = {
     glm::vec2{-1, -1},
     glm::vec2{1, -1},
@@ -159,41 +209,129 @@ std::array<glm::vec2, 6> screen_vertices = {
     glm::vec2{1, 1}
 };
 
-std::array<Vertex, 30> box_vertices {
-    Vertex({0, 0, 0}, {0, 0}, {15, 11}),
-    Vertex({1, 0, 0}, {16, 0}, {15, 11}),
-    Vertex({1, 0, 0.75}, {16, 12}, {15, 11}),
-    Vertex({0, 0, 0}, {0, 0}, {15, 11}),
-    Vertex({1, 0, 0.75}, {16, 12}, {15, 11}),
-    Vertex({0, 0, 0.75}, {0, 12}, {15, 11}),
+std::array<Vertex, 90> box_vertices = {
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}), // south
+    Vertex({1, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 15}),
 
-    Vertex({1, 0, 0}, {0, 0}, {15, 11}),
-    Vertex({1, 1, 0}, {16, 0}, {15, 11}),
-    Vertex({1, 1, 0.75}, {16, 12}, {15, 11}),
-    Vertex({1, 0, 0}, {0, 0}, {15, 11}),
-    Vertex({1, 1, 0.75}, {16, 12}, {15, 11}),
-    Vertex({1, 0, 0.75}, {0, 12}, {15, 11}),
+    Vertex({1, 0, 0}, {0, 0}, {15, 15}), // east
+    Vertex({1, 2, 0}, {16, 0}, {15, 15}),
+    Vertex({1, 2, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({1, 2, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 0, 1.00}, {0, 16}, {15, 15}),
 
-    Vertex({1, 1, 0}, {0, 0}, {15, 11}),
-    Vertex({0, 1, 0}, {16, 0}, {15, 11}),
-    Vertex({0, 1, 0.75}, {16, 12}, {15, 11}),
-    Vertex({1, 1, 0}, {0, 0}, {15, 11}),
-    Vertex({0, 1, 0.75}, {16, 12}, {15, 11}),
-    Vertex({1, 1, 0.75}, {0, 12}, {15, 11}),
+    Vertex({1, 2, 0}, {0, 0}, {15, 15}), // north
+    Vertex({0, 2, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 2, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 2, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 2, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 2, 1.00}, {0, 16}, {15, 15}),
 
-    Vertex({0, 1, 0}, {0, 0}, {15, 11}),
-    Vertex({0, 0, 0}, {16, 0}, {15, 11}),
-    Vertex({0, 0, 0.75}, {16, 12}, {15, 11}),
-    Vertex({0, 1, 0}, {0, 0}, {15, 11}),
-    Vertex({0, 0, 0.75}, {16, 12}, {15, 11}),
-    Vertex({0, 1, 0.75}, {0, 12}, {15, 11}),
+    Vertex({0, 2, 0}, {0, 0}, {15, 15}), // west
+    Vertex({0, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 2, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 2, 1.00}, {0, 16}, {15, 15}),
 
-    Vertex({0, 0, 0.75}, {0, 12}, {15, 27}),
-    Vertex({1, 0, 0.75}, {16, 12}, {15, 27}),
-    Vertex({1, 1, 0.75}, {16, 28}, {15, 27}),
-    Vertex({0, 0, 0.75}, {0, 12}, {15, 27}),
-    Vertex({1, 1, 0.75}, {16, 28}, {15, 27}),
-    Vertex({0, 1, 0.75}, {0, 28}, {15, 27}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}), // top
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 31}),
+    Vertex({1, 2, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}),
+    Vertex({1, 2, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 2, 1.00}, {0, 32}, {15, 31}),
+
+    //
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}), // south
+    Vertex({2, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({2, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({2, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({2, 0, 0}, {0, 0}, {15, 15}), // east
+    Vertex({2, 1, 0}, {16, 0}, {15, 15}),
+    Vertex({2, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({2, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({2, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({2, 0, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({2, 1, 0}, {0, 0}, {15, 15}), // north
+    Vertex({0, 1, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({2, 1, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({2, 1, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({0, 1, 0}, {0, 0}, {15, 15}), // west
+    Vertex({0, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 1, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 1, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}), // top
+    Vertex({2, 0, 1.00}, {16, 16}, {15, 31}),
+    Vertex({2, 1, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}),
+    Vertex({2, 1, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 1, 1.00}, {0, 32}, {15, 31}),
+
+    //
+
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}), // south
+    Vertex({1, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({1, 0, 0}, {0, 0}, {15, 15}), // east
+    Vertex({1, 1, 0}, {16, 0}, {15, 15}),
+    Vertex({1, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 0, 0}, {0, 0}, {15, 15}),
+    Vertex({1, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 0, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({1, 1, 0}, {0, 0}, {15, 15}), // north
+    Vertex({0, 1, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 1, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 1, 1.00}, {16, 16}, {15, 15}),
+    Vertex({1, 1, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({0, 1, 0}, {0, 0}, {15, 15}), // west
+    Vertex({0, 0, 0}, {16, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 1, 0}, {0, 0}, {15, 15}),
+    Vertex({0, 0, 1.00}, {16, 16}, {15, 15}),
+    Vertex({0, 1, 1.00}, {0, 16}, {15, 15}),
+
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}), // top
+    Vertex({1, 0, 1.00}, {16, 16}, {15, 31}),
+    Vertex({1, 1, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 0, 1.00}, {0, 16}, {15, 31}),
+    Vertex({1, 1, 1.00}, {16, 32}, {15, 31}),
+    Vertex({0, 1, 1.00}, {0, 32}, {15, 31}),
+};
+
+struct Vertex_pix {
+    glm::vec3 pos;
+    glm::vec2 tex;
+    glm::vec2 tex_depth;
+};
+
+std::vector<Vertex_pix> pix_vec = {
+    Vertex_pix({0, 0, 0}, {0, 32}, {0, 52}),
+    Vertex_pix({1, 0, 0}, {16, 32}, {16, 52}),
+    Vertex_pix({1, 1, (2.0 / 3)}, {16, 52}, {16, 72}),
+    Vertex_pix({1, 1, (2.0 / 3)}, {16, 52}, {16, 72}),
+    Vertex_pix({0, 0, 0}, {0, 32}, {0, 52}),
+    Vertex_pix({0, 1, (2.0 / 3)}, {0, 52}, {0, 72}),
 };
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -219,10 +357,14 @@ void scroll_callback(GLFWwindow* window, double x_offset, double y_offset) {
 
     if(y_offset > 0 && core.scale < 80) {
         core.scale += 16;
+        core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
+
         core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
         core.reload_active_chunks = true;
     } else if(y_offset < 0 && core.scale > 16) {
         core.scale -= 16;
+        core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
+
         core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
         core.reload_active_chunks = true;
     }
@@ -241,9 +383,28 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 int main() {
+    glm::mat4 rot_mat = glm::rotate(float(M_PI / 4), glm::vec3(0, 0, 1));
+    for(int i = 0; i < 30; ++i) {
+        box_vertices[30 + i].position += glm::vec3(2, 3, 0);
+        
+        box_vertices[60 + i].position *= M_SQRT1_2;
+        box_vertices[60 + i].position -= glm::vec3(M_SQRT1_2 / 2, M_SQRT1_2 / 2, 0.0);
+
+        glm::vec4 rot_pos = rot_mat * glm::vec4(box_vertices[60 + i].position, 1.0);
+        box_vertices[60 + i].position = glm::vec3(rot_pos);
+
+        box_vertices[60 + i].position += glm::vec3(2.5, 0.5, 0.0);
+    }
+
     bool game_running = true;
     glm::ivec2 screen_size(800, 600);
     int scale = 48;
+
+    /*
+    for(Vertex& v : box_vertices) {
+        glm::vec4 rot_pos = rot_mat * glm::vec4(v.position, 1.0);
+        v.position = glm::vec3(rot_pos.x, rot_pos.y, rot_pos.z);
+    }*/
 
     stbi_set_flip_vertically_on_load(true);
     // init glfw
@@ -285,7 +446,7 @@ int main() {
         "res\\box.png"
     };
     std::vector<const char*> shader_vec = {
-        vs_chunk, fs_chunk, vs_player, fs_player, vs_screen, fs_screen
+        vs_chunk, fs_chunk, vs_player, fs_player, vs_screen, fs_screen, vs_screen, fs_shadow, vs_pix, fs_pix
     };
 
     // core
@@ -307,17 +468,23 @@ int main() {
 
     // framebuffer
 
-    core.buffers.resize(2);
+    core.buffers.resize(3);
 
     core.buffers[0].init();
     core.buffers[0].set_data(screen_vertices.data(), sizeof(glm::vec3) * screen_vertices.size());
     core.buffers[0].set_attrib(0, 2, 2 * sizeof(float), 0);
 
     core.buffers[1].init();
-    core.buffers[1].set_data(box_vertices.data(), sizeof(Vertex) * 30);
+    core.buffers[1].set_data(box_vertices.data(), sizeof(Vertex) * 90);
     core.buffers[1].set_attrib(0, 3, 7 * sizeof(float), 0);
     core.buffers[1].set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
     core.buffers[1].set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
+
+    core.buffers[2].init();
+    core.buffers[2].set_data(pix_vec.data(), sizeof(Vertex_pix) * pix_vec.size());
+    core.buffers[2].set_attrib(0, 3, 7 * sizeof(float), 0);
+    core.buffers[2].set_attrib(1, 2, 7 * sizeof(float), 3 * sizeof(float));
+    core.buffers[2].set_attrib(2, 2, 7 * sizeof(float), 5 * sizeof(float));
 
     //
 

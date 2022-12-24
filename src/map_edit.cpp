@@ -1,0 +1,657 @@
+#define USE_2D
+#include "wrapper.cpp"
+#include "fstream"
+#include <chrono>
+
+time_t get_time() {
+    return std::chrono::steady_clock::now().time_since_epoch().count();
+}
+
+// shaders
+
+const char* vs_grid = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+layout(location = 0) uniform mat3 matrix;
+layout(location = 1) uniform vec2 cam_pos;
+
+out vec2 world_coord;
+out ivec2 recentered;
+
+void main() {
+    world_coord = (matrix * vec3(pos, 1.0)).xy;
+    recentered = ivec2(0, 0);
+
+    if(abs(cam_pos.x) > 4096.0) {
+        world_coord.x -= floor(cam_pos.x / 4096.0) * 4096.0;
+        recentered.x = 1;
+    }
+    if(abs(cam_pos.y) > 4096.0) {
+        world_coord.y -= floor(cam_pos.y / 4096.0) * 4096.0;
+        recentered.y = 1;
+    }
+
+    gl_Position = vec4(pos, 0.5, 1.0);
+}
+)""";
+
+const char* fs_grid = R"""(
+#version 460 core
+
+layout(location = 2) uniform int scale;
+
+in vec2 world_coord;
+flat in ivec2 recentered;
+
+out vec4 frag_color;
+
+void main() {
+    float pixel_size = 1.0 / scale;
+
+    ivec2 floor_coord = ivec2(floor(world_coord));
+    
+    float pixel_shift = pixel_size * int(scale >= 16);
+    ivec2 shifted_floor_coord = ivec2(floor(world_coord + pixel_shift));
+
+    float difference_x = world_coord.x - floor_coord.x;
+    float difference_y = world_coord.y - floor_coord.y;
+    
+    if(shifted_floor_coord.y % 16 == 0 && world_coord.y - shifted_floor_coord.y < pixel_size) {
+        if(recentered.y == 0 && shifted_floor_coord.y == 0) {
+            frag_color = vec4(1.0, 0.25, 0.25, 0.5);
+        } else if(shifted_floor_coord.y % 256 == 0) {
+            frag_color = vec4(1.0, 0.875, 0.25, 0.5);
+        } else {
+            frag_color = vec4(0.75, 0.75, 0.75, 0.5);
+        }
+    } else if(shifted_floor_coord.x % 16 == 0 && world_coord.x - shifted_floor_coord.x < pixel_size) {
+        if(recentered.x == 0 && shifted_floor_coord.x == 0) {
+            frag_color = vec4(0.25, 0.25, 1.0, 0.5);
+        } else if(shifted_floor_coord.x % 256 == 0) {
+            frag_color = vec4(1.0, 0.875, 0.25, 0.5);
+        } else {
+            frag_color = vec4(0.75, 0.75, 0.75, 0.5);
+        }
+    } else if(scale >= 16 && (difference_x < pixel_size || difference_y < pixel_size)) {
+        frag_color = vec4(0.75, 0.75, 0.75, 0.25);
+    } else {
+        discard;
+    }
+}
+)""";
+
+const char* vs_hover = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+layout(location = 0) uniform mat3 pos_matrix;
+layout(location = 1) uniform mat3 cam_matrix;
+layout(location = 2) uniform vec4 in_tex;
+
+out vec2 tex_coords;
+
+void main() {
+    tex_coords = pos * in_tex.zw + in_tex.xy;
+    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
+}
+)""";
+
+const char* fs_hover = R"""(
+#version 460 core
+layout(location = 3) uniform sampler2D active_texture;
+
+in vec2 tex_coords;
+
+out vec4 frag_color;
+
+void main() {
+    frag_color = vec4(texelFetch(active_texture, ivec2(tex_coords), 0).rgb, 0.25);
+}
+)""";
+
+const char* vs_delete = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+
+layout(location = 0) uniform mat3 pos_matrix;
+layout(location = 1) uniform mat3 cam_matrix;
+
+void main() {
+    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
+}
+)""";
+
+const char* fs_delete = R"""(
+#version 460 core
+layout(location = 2) uniform float alpha;
+
+out vec4 frag_color;
+
+void main() {
+    frag_color = vec4(1.0, 0.0, 0.0, alpha);
+}
+)""";
+
+const char* vs_chunk = R"""(
+#version 460 core
+layout(location = 0) in vec2 pos;
+layout(location = 1) in vec2 tex;
+
+layout(location = 0) uniform mat3 pos_matrix;
+layout(location = 1) uniform mat3 cam_matrix;
+
+out vec2 tex_coords;
+
+void main() {
+    tex_coords = tex;
+    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
+}
+)""";
+
+const char* fs_chunk = R"""(
+#version 460 core
+layout(location = 2) uniform sampler2D active_texture;
+
+in vec2 tex_coords;
+
+out vec4 frag_color;
+
+void main() {
+    frag_color = texelFetch(active_texture, ivec2(tex_coords), 0);
+}
+)""";
+
+struct vec_comp {
+    bool operator()(const glm::ivec2& a, const glm::ivec2& b) const {
+        return b.y > a.y || (b.y == a.y && b.x > a.x);
+    }
+};
+
+int convert(glm::ivec2 key) {
+    return key.x - 256 + (key.y - 256) * 512;
+}
+
+// vertices
+
+struct Vertex_0 {
+    glm::vec2 pos;
+    glm::vec2 tex;
+
+    Vertex_0(float a, float b, float c, float d) {
+        pos = {a, b};
+        tex = {c, d};
+    }
+
+    Vertex_0() = default;
+};
+
+glm::vec2 screen_vertices[] = {
+    glm::vec2{-1, -1},
+    glm::vec2{1, -1},
+    glm::vec2{-1, 1},
+    glm::vec2{-1, 1},
+    glm::vec2{1, -1},
+    glm::vec2{1, 1}
+};
+
+Vertex_0 tile_vertices[] = {
+    {0, 0, 0, 0},
+    {1, 0, 16, 0},
+    {0, 1, 0, 16},
+    {0, 1, 0, 16},
+    {1, 0, 16, 0},
+    {1, 1, 16, 16}
+};
+
+struct Tile_data {
+    glm::ivec2 loc;
+    glm::ivec2 size;
+};
+
+struct Chunk;
+
+enum mode{VIEW, EDIT};
+
+struct Core {
+    bool game_running = true;
+    glm::ivec2 screen_size = {800, 600};
+
+    int active_tile_id = 1;
+    int max_tile_id = 0;
+
+    mode active_mode = VIEW;
+
+    std::map<int, bool> keymap = {
+
+    };
+
+    std::map<int, bool> keymap_mouse = {
+        {GLFW_MOUSE_BUTTON_RIGHT, false},
+        {GLFW_MOUSE_BUTTON_LEFT, false},
+        {GLFW_MOUSE_BUTTON_MIDDLE, false}
+    };
+
+    std::vector<Tile_data> tile_data = std::vector<Tile_data>(1);
+    //std::vector<Texture> textures;
+    Texture texture;
+
+    std::map<glm::ivec2, Chunk, vec_comp> chunks;
+
+    glm::vec2 camera_pos = {0, 0};
+    glm::ivec2 mouse_pos = {0, 0};
+    int scale = 16;
+};
+
+struct Chunk {
+    std::array<int, 256> tiles;
+    glm::ivec2 pos;
+    int vertices = 0;
+
+    Buffer buffer;
+
+    Chunk(glm::ivec2 pos) {
+        tiles.fill(0);
+        buffer.init();
+
+        this->pos = pos;
+    }
+
+    Chunk() {
+        tiles.fill(0);
+    };
+
+    void create_vertices(Core& core) {
+
+        std::vector<Vertex_0> vertex_vec;
+
+        for(int i = 0; i < 256; i++) {
+            int tile = tiles[i];
+            if(tile) {
+                Tile_data& current_tile_data = core.tile_data[tile];
+                int x = i % 16;
+                int y = i / 16;
+
+                vertex_vec.push_back(Vertex_0{x, y, current_tile_data.loc.x, current_tile_data.loc.y});
+                vertex_vec.push_back(Vertex_0{x + 1, y, current_tile_data.loc.x + current_tile_data.size.x, current_tile_data.loc.y});
+                vertex_vec.push_back(Vertex_0{x, y + 1, current_tile_data.loc.x, current_tile_data.loc.y + current_tile_data.size.y});
+                vertex_vec.push_back(Vertex_0{x, y + 1, current_tile_data.loc.x, current_tile_data.loc.y + current_tile_data.size.y});
+                vertex_vec.push_back(Vertex_0{x + 1, y, current_tile_data.loc.x + current_tile_data.size.x, current_tile_data.loc.y});
+                vertex_vec.push_back(Vertex_0{x + 1, y + 1, current_tile_data.loc.x + current_tile_data.size.x, current_tile_data.loc.y + current_tile_data.size.y});
+            }
+        }
+
+        vertices = vertex_vec.size();
+        buffer.bind();
+        buffer.set_data(vertex_vec.data(), vertices * sizeof(Vertex_0));
+        buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
+        buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
+    }
+};
+
+void load_data(Core& core) {
+    std::ifstream data;
+    data.open("res\\data.txt");
+
+    if(data.is_open()) {
+        char string[64];
+        bool end = false;
+        while(!end) {
+            data >> string;
+            if(strcmp(string, "end") == 0) {
+                end = true;
+            } else if(strcmp(string, "tile") == 0) {
+                int tile_pos = core.tile_data.size();
+                core.tile_data.push_back(Tile_data());
+
+                data >> core.tile_data[tile_pos].loc.x >> core.tile_data[tile_pos].loc.y >> core.tile_data[tile_pos].size.x >> core.tile_data[tile_pos].size.y;
+                core.max_tile_id++;
+            }
+        }
+        data.close();
+    } else {
+        std::cout << "unable to open data.txt" << std::endl;
+    }
+
+    std::ifstream save;
+    save.open("output\\save.txt");
+
+    if(save.is_open()) {
+        char string[64];
+        bool end = false;
+        while(!end) {
+            save >> string;
+            if(strcmp(string, "end") == 0) {
+                end = true;
+            } else if(strcmp(string, "chunk") == 0) {
+                glm::ivec2 loc;
+                save >> loc.x >> loc.y;
+
+                core.chunks.insert({loc, Chunk(loc)});
+                Chunk& chunk = core.chunks[loc];
+
+                for(int i = 0; i < 256; i++) {
+                    int id;
+                    save >> id;
+                    if(id == 0) {
+                        save >> id;
+                        i += id - 1;
+                    } else {
+                        chunk.tiles[i] = id;
+                    }
+                }
+            }
+        }
+        save.close();
+    } else {
+        std::cout << "unable to open save.txt" << std::endl;
+    }
+}
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    if(action == GLFW_PRESS) {
+
+        if(core.keymap.contains(key)) {
+            core.keymap[key] = true;
+        } else if(key > 47 && key <= 48 + core.max_tile_id) {
+            core.active_tile_id = key - 48;
+        } else if(key == GLFW_KEY_F11) {
+            std::vector<uint8_t> vector(core.screen_size.x * core.screen_size.y * 3);
+            glReadPixels(0, 0, core.screen_size.x, core.screen_size.y, GL_RGB, GL_UNSIGNED_BYTE, vector.data());
+
+            stbi_write_png("output\\screenshot.png", core.screen_size.x, core.screen_size.y, 3, vector.data(), core.screen_size.x * 3);
+        } else if(key == GLFW_KEY_P) {
+            if(core.active_mode == VIEW) {
+                core.active_mode = EDIT;
+            } else {
+                core.active_mode = VIEW;
+            }
+        }
+
+    } else if(action == GLFW_RELEASE) {
+
+        if(core.keymap.contains(key)) {
+            core.keymap[key] = false;
+        }
+    }
+}
+
+void cursor_pos_callback(GLFWwindow* window, double x_pos, double y_pos) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    glm::ivec2 new_pos(x_pos, y_pos);
+    if(core.keymap_mouse[GLFW_MOUSE_BUTTON_RIGHT]) {
+        glm::vec2 difference(new_pos - core.mouse_pos);
+        core.camera_pos += glm::vec2(-difference.x, difference.y) / float(core.scale);
+    }
+    core.mouse_pos = new_pos;
+}
+
+void scroll_callback(GLFWwindow* window, double x_offset, double y_offset) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    if(y_offset > 0 && core.scale < 96) {
+        if(core.scale < 16) {
+            core.scale *= 2;
+        } else {
+            core.scale += 16;
+        }
+        /*core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
+
+        core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+        core.reload_active_chunks = true;*/
+    } else if(y_offset < 0) {
+        if(core.scale > 16) {
+            core.scale -= 16;
+        } else if(core.scale > 1) {
+            core.scale /= 2;
+        }
+        /*core.framebuffer.resize({core.screen_size.x, core.screen_size.y});
+
+        core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+        core.reload_active_chunks = true;*/
+    }
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    core.screen_size.x = width + 1 * (width % 2 == 1);
+    core.screen_size.y = height + 1 * (height % 2 == 1);
+    
+    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+
+    /*core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
+    core.reload_active_chunks = true;
+
+    core.framebuffer.resize({core.screen_size.x, core.screen_size.y});*/
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    if(action == GLFW_PRESS) {
+        if(core.keymap_mouse.contains(button)) {
+            core.keymap_mouse[button] = true;
+        }
+    } else if(action == GLFW_RELEASE) {
+        if(core.keymap_mouse.contains(button)) {
+            core.keymap_mouse[button] = false;
+        }
+    }
+}
+
+void save_game(std::string address, Core& core) {
+    std::ofstream output;
+    output.open(address);
+
+    std::string output_string = "";
+    for(auto& [key, chunk] : core.chunks) {
+        std::string chunk_line = "chunk ";
+        chunk_line += std::to_string(chunk.pos.x) + " " + std::to_string(chunk.pos.y);
+
+        int zero_counter = 0;
+        for(int i = 0; i < 256; i++) {
+            int id = chunk.tiles[i];
+            if(id != 0) {
+                if(zero_counter != 0) {
+                    chunk_line += " " + std::to_string(zero_counter);
+                    zero_counter = 0;
+                }
+                chunk_line += " " + std::to_string(id);
+            } else {
+                if(zero_counter == 0) {
+                    chunk_line += " 0";
+                }
+                zero_counter++;
+            }
+        }
+        if(zero_counter != 0) {
+            chunk_line += " " + std::to_string(zero_counter);
+        }
+
+        chunk_line += "\n";
+        output_string += chunk_line;
+    }
+    output_string += "end";
+    output << output_string;
+    output.close();
+}
+
+int main() {
+    Core core;
+
+    // init glfw and set version
+    if(glfwInit() == GLFW_FALSE) {
+        std::cout << "ERROR: GLFW failed to load.\n";
+        return -1;
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    
+    // create window
+    GLFWwindow* window = glfwCreateWindow(core.screen_size.x, core.screen_size.y, "This is a test.", NULL, NULL);
+    if(window == NULL) {
+        std::cout << "ERROR: Window creation failed.\n";
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+
+    // init glad and set viewport
+    if(!gladLoadGL()) {
+        std::cout << "ERROR: GLAD failed to load.\n";
+        glfwTerminate();
+        return -1;
+    }
+    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+
+    // load data
+    load_data(core);
+
+    glfwSetWindowUserPointer(window, &core);
+
+    Buffer grid_buffer;
+    grid_buffer.init();
+    grid_buffer.set_data(screen_vertices, sizeof(glm::vec2) * 6);
+    grid_buffer.set_attrib(0, 2, 2 * sizeof(float), 0);
+
+    Buffer hover_buffer;
+    hover_buffer.init();
+    hover_buffer.set_data(tile_vertices, sizeof(Vertex_0) * 6);
+    hover_buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
+    hover_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
+
+    Shader grid_shader;
+    grid_shader.compile(vs_grid, fs_grid);
+
+    Shader hover_shader;
+    hover_shader.compile(vs_hover, fs_hover);
+
+    Shader chunk_shader;
+    chunk_shader.compile(vs_chunk, fs_chunk);
+
+    Shader delete_shader;
+    delete_shader.compile(vs_delete, fs_delete);
+
+    // set up stbi and load textures
+    stbi_set_flip_vertically_on_load(true);
+    stbi__flip_vertically_on_write = true;
+
+    core.texture.load("res\\tile.png");
+
+    // set callbacks
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+    /*core.chunks.insert({0, Chunk({0, 0})});
+    core.chunks[0].tiles[0] = 1;
+    core.chunks[0].tiles[39] = 1;
+    core.chunks[0].create_vertices(core);*/
+
+    for(auto& [key, chunk] : core.chunks) {
+        chunk.create_vertices(core);
+    }
+
+    time_t start_time = get_time();
+    time_t time_container = get_time();
+
+    while(core.game_running == true) {
+        // -> logic
+
+        time_t new_time = get_time();
+        time_t delta_time = new_time - time_container;
+        time_container = new_time;
+
+        glfwPollEvents();
+
+        // get mouse position in world
+        glm::vec2 mouse_pos_world = glm::vec2(core.mouse_pos.x - core.screen_size.x / 2, -core.mouse_pos.y - 1 + core.screen_size.y / 2);
+        mouse_pos_world = mouse_pos_world / float(core.scale) + core.camera_pos;
+
+        
+        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] && core.active_mode == EDIT) {
+            glm::ivec2 location = glm::floor(mouse_pos_world);
+
+            glm::ivec2 chunk_key = glm::floor(glm::vec2(location) / 16.0f);
+            glm::ivec2 pos_in_chunk = location - chunk_key * 16;
+
+            if(!core.chunks.contains(chunk_key)) {
+                core.chunks.insert({chunk_key, Chunk(chunk_key)});
+            }
+
+            Chunk& chunk = core.chunks[chunk_key];
+            int& focus_tile = chunk.tiles[pos_in_chunk.y * 16 + pos_in_chunk.x];
+
+            if(focus_tile != core.active_tile_id) {
+                focus_tile = core.active_tile_id;
+                chunk.create_vertices(core);
+            }
+        }
+
+        // -> render
+
+        glClearColor(0.0, 0.0, 0.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glm::mat3 matrix = glm::translate(identity_matrix, glm::floor(core.camera_pos * float(core.scale)) / float(core.scale));
+        matrix = glm::scale(matrix, glm::vec2{core.screen_size} / (float(core.scale) * 2));
+
+        // do not delete!!!
+        /*glm::mat3 cam_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        cam_matrix = glm::scale(cam_matrix, float(core.scale) / glm::vec2{core.screen_size / 2});
+        cam_matrix = glm::translate(cam_matrix, -glm::floor(core.camera_pos * float(core.scale)) / float(core.scale));*/
+        glm::mat3 cam_matrix = glm::inverse(matrix);
+
+        glm::mat3 hover_matrix = glm::translate(identity_matrix, glm::floor(mouse_pos_world));
+
+        chunk_shader.use();
+        glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
+        core.texture.bind(0, 2);
+        for(auto& [key, chunk] : core.chunks) {
+            glm::mat3 chunk_matrix = glm::translate(identity_matrix, glm::vec2(chunk.pos * 16));
+            glUniformMatrix3fv(0, 1, false, &chunk_matrix[0][0]);
+            chunk.buffer.bind();
+            glDrawArrays(GL_TRIANGLES, 0, chunk.vertices);
+        }
+        
+        if(core.active_mode == EDIT) {
+            // draw hover
+            hover_buffer.bind();
+            if(core.active_tile_id == 0) {
+                delete_shader.use();
+                glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
+                glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
+                glUniform1f(2, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.125 + 0.375);
+            } else {
+                hover_shader.use();
+                glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
+                glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
+                glUniform4f(2, core.tile_data[core.active_tile_id].loc.x, core.tile_data[core.active_tile_id].loc.y, core.tile_data[core.active_tile_id].size.x, core.tile_data[core.active_tile_id].size.y);
+                core.texture.bind(0, 3);
+            }
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            grid_buffer.bind();
+            grid_shader.use();
+            glUniformMatrix3fv(0, 1, false, &matrix[0][0]);
+            glUniform2fv(1, 1, &core.camera_pos[0]);
+            glUniform1i(2, core.scale);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        glfwSwapBuffers(window);
+
+        core.game_running = !glfwWindowShouldClose(window);
+    }
+
+    save_game("output\\save.txt", core);
+
+    glfwTerminate();
+}

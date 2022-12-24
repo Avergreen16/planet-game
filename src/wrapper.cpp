@@ -78,7 +78,7 @@ struct Buffer {
             glDeleteBuffers(1, &vertex_buffer);
             glDeleteBuffers(1, &vertex_array);
 
-            std::cout << "Buffer deleted\n";
+            //std::cout << "Buffer deleted\n";
         }
     }
 };

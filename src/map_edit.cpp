@@ -2,6 +2,8 @@
 #include "wrapper.cpp"
 #include "fstream"
 #include <chrono>
+#include <deque>
+#include <set>
 
 time_t get_time() {
     return std::chrono::steady_clock::now().time_since_epoch().count();
@@ -213,6 +215,20 @@ struct Chunk;
 
 enum mode{VIEW, EDIT};
 
+enum edit_mode{SET, FILL};
+
+typedef std::array<glm::ivec2, 2> tile_loc;
+
+struct Set_action {
+    tile_loc loc;
+    int prev;
+    int set;
+};
+
+struct Action {
+    std::vector<Set_action> contents;
+};
+
 struct Core {
     bool game_running = true;
     glm::ivec2 screen_size = {800, 600};
@@ -221,9 +237,15 @@ struct Core {
     int max_tile_id = 0;
 
     mode active_mode = VIEW;
+    edit_mode active_edit_mode = SET;
+
+    // used for undo/redo
+    Action new_action;
+    std::deque<Action> action_queue;
+    int pos_in_queue = -1;
 
     std::map<int, bool> keymap = {
-
+        {GLFW_KEY_LEFT_CONTROL, false}
     };
 
     std::map<int, bool> keymap_mouse = {
@@ -241,6 +263,28 @@ struct Core {
     glm::vec2 camera_pos = {0, 0};
     glm::ivec2 mouse_pos = {0, 0};
     int scale = 16;
+
+    void insert_action() {
+        if(new_action.contents.size() != 0) {
+            if(action_queue.size() > pos_in_queue + 1) {
+                action_queue.erase(action_queue.begin() + pos_in_queue + 1, action_queue.end());
+            }
+            pos_in_queue++;
+            action_queue.push_back(new_action);
+
+            new_action.contents.clear();
+        }
+    }
+
+    void insert_action(Action& a) {
+        if(a.contents.size() != 0) {
+            if(action_queue.size() > pos_in_queue + 1) {
+                action_queue.erase(action_queue.begin() + pos_in_queue + 1, action_queue.end());
+            }
+            pos_in_queue++;
+            action_queue.push_back(a);
+        }
+    }
 };
 
 struct Chunk {
@@ -306,6 +350,9 @@ void load_data(Core& core) {
 
                 data >> core.tile_data[tile_pos].loc.x >> core.tile_data[tile_pos].loc.y >> core.tile_data[tile_pos].size.x >> core.tile_data[tile_pos].size.y;
                 core.max_tile_id++;
+            } else {
+                end = true;
+                std::cout << "error reading data.txt" << std::endl;
             }
         }
         data.close();
@@ -379,6 +426,9 @@ void load_data(Core& core) {
                     }
                 }
                 std::cout << i << std::endl;
+            } else {
+                end = true;
+                std::cout << "error reading data.txt" << std::endl;
             }
         }
         save.close();
@@ -405,6 +455,54 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                 core.active_mode = EDIT;
             } else {
                 core.active_mode = VIEW;
+                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] && core.new_action.contents.size() != 0) {
+                    core.insert_action();
+                }
+            }
+        } else if(key == GLFW_KEY_F) {
+            if(core.active_edit_mode == SET) {
+                core.active_edit_mode = FILL;
+                core.insert_action();
+            } else {
+                core.active_edit_mode = SET;
+            }
+        }
+
+        if(core.keymap[GLFW_KEY_LEFT_CONTROL]) {
+            if(key == GLFW_KEY_Z) {
+                if(core.pos_in_queue != -1) {
+                    Action action = core.action_queue[core.pos_in_queue];
+                    std::set<Chunk*> edited_chunks;
+
+                    for(Set_action a : action.contents) {
+                        Chunk& chunk = core.chunks[a.loc[0]];
+                        chunk.tiles[a.loc[1].x + a.loc[1].y * 16] = a.prev;
+                        edited_chunks.insert(&chunk);
+                    }
+
+                    for(Chunk* c : edited_chunks) {
+                        c->create_vertices(core);
+                    }
+
+                    core.pos_in_queue--;
+                }
+            } else if(key == GLFW_KEY_Y) {
+                if(core.pos_in_queue != core.action_queue.size() - 1) {
+                    core.pos_in_queue++;
+
+                    Action action = core.action_queue[core.pos_in_queue];
+                    std::set<Chunk*> edited_chunks;
+
+                    for(Set_action a : action.contents) {
+                        Chunk& chunk = core.chunks[a.loc[0]];
+                        chunk.tiles[a.loc[1].x + a.loc[1].y * 16] = a.set;
+                        edited_chunks.insert(&chunk);
+                    }
+
+                    for(Chunk* c : edited_chunks) {
+                        c->create_vertices(core);
+                    }
+                }
             }
         }
 
@@ -474,6 +572,17 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if(core.keymap_mouse.contains(button)) {
             core.keymap_mouse[button] = false;
         }
+        if(button == GLFW_MOUSE_BUTTON_LEFT && core.active_mode == EDIT) {
+            if(core.new_action.contents.size() != 0) {
+                if(core.action_queue.size() > core.pos_in_queue + 1) {
+                    core.action_queue.erase(core.action_queue.begin() + core.pos_in_queue + 1, core.action_queue.end());
+                }
+                core.pos_in_queue++;
+                core.action_queue.push_back(core.new_action);
+
+                core.new_action.contents.clear();
+            }
+        }
     }
 }
 
@@ -518,6 +627,24 @@ void save_game(std::string address, Core& core) {
     output_string += "end";
     output << output_string;
     output.close();
+}
+
+void modify_tile_loc(tile_loc& loc) {
+    if(loc[1].x < 0) {
+        loc[1].x += 16;
+        loc[0].x--;
+    } else if(loc[1].x > 15) {
+        loc[1].x -= 16;
+        loc[0].x++;
+    }
+
+    if(loc[1].y < 0) {
+        loc[1].y += 16;
+        loc[0].y--;
+    } else if(loc[1].y > 15) {
+        loc[1].y -= 16;
+        loc[0].y++;
+    }
 }
 
 int main() {
@@ -620,23 +747,99 @@ int main() {
         glm::vec2 mouse_pos_world = glm::vec2(core.mouse_pos.x - core.screen_size.x / 2, -core.mouse_pos.y - 1 + core.screen_size.y / 2);
         mouse_pos_world = mouse_pos_world / float(core.scale) + core.camera_pos;
 
-        
         if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] && core.active_mode == EDIT) {
-            glm::ivec2 location = glm::floor(mouse_pos_world);
+            switch(core.active_edit_mode) {
+                case SET: {
+                    glm::ivec2 location = glm::floor(mouse_pos_world);
 
-            glm::ivec2 chunk_key = glm::floor(glm::vec2(location) / 16.0f);
-            glm::ivec2 pos_in_chunk = location - chunk_key * 16;
+                    glm::ivec2 chunk_key = glm::floor(glm::vec2(location) / 16.0f);
+                    glm::ivec2 pos_in_chunk = location - chunk_key * 16;
 
-            if(!core.chunks.contains(chunk_key)) {
-                core.chunks.insert({chunk_key, Chunk(chunk_key)});
-            }
+                    if(!core.chunks.contains(chunk_key)) {
+                        core.chunks.insert({chunk_key, Chunk(chunk_key)});
+                    }
 
-            Chunk& chunk = core.chunks[chunk_key];
-            int& focus_tile = chunk.tiles[pos_in_chunk.y * 16 + pos_in_chunk.x];
+                    Chunk& chunk = core.chunks[chunk_key];
+                    int& focus_tile = chunk.tiles[pos_in_chunk.y * 16 + pos_in_chunk.x];
 
-            if(focus_tile != core.active_tile_id) {
-                focus_tile = core.active_tile_id;
-                chunk.create_vertices(core);
+                    if(focus_tile != core.active_tile_id) {
+                        core.new_action.contents.push_back(Set_action(tile_loc{chunk_key, pos_in_chunk}, focus_tile, core.active_tile_id));
+
+                        focus_tile = core.active_tile_id;
+                        chunk.create_vertices(core);
+                    }
+                    break;
+                }
+
+                case FILL: {
+                    glm::ivec2 location = glm::floor(mouse_pos_world);
+
+                    glm::ivec2 chunk_key = glm::floor(glm::vec2(location) / 16.0f);
+                    glm::ivec2 pos_in_chunk = location - chunk_key * 16;
+
+                    if(!core.chunks.contains(chunk_key)) {
+                        core.chunks.insert({chunk_key, Chunk(chunk_key)});
+                    }
+
+                    int focus_id = core.chunks[chunk_key].tiles[pos_in_chunk.y * 16 + pos_in_chunk.x];
+
+                    if(focus_id != core.active_tile_id) {
+                        std::set<Chunk*> edited_chunks;
+                        Action action;
+
+                        std::queue<tile_loc> queue;
+                        queue.push(tile_loc{chunk_key, pos_in_chunk});
+                        int counter = 0;
+                        while(queue.size() != 0 && counter < 2113) {
+                            tile_loc current_loc = queue.front();
+                            queue.pop();
+                            if(!core.chunks.contains(current_loc[0])) {
+                                core.chunks.insert({current_loc[0], Chunk(current_loc[0])});
+                            }
+                            Chunk& chunk = core.chunks[current_loc[0]];
+
+                            int& tile = chunk.tiles[current_loc[1].x + current_loc[1].y * 16];
+
+                            if(tile == focus_id) {
+                                counter++;
+
+                                tile = core.active_tile_id;
+                                action.contents.push_back(Set_action(current_loc, focus_id, core.active_tile_id));
+
+                                tile_loc north = current_loc;
+                                tile_loc east = current_loc;
+                                tile_loc south = current_loc;
+                                tile_loc west = current_loc;
+
+                                north[1].y++;
+                                east[1].x++;
+                                south[1].y--;
+                                west[1].x--;
+
+                                modify_tile_loc(north);
+                                modify_tile_loc(east);
+                                modify_tile_loc(south);
+                                modify_tile_loc(west);
+
+                                queue.push(north);
+                                queue.push(east);
+                                queue.push(south);
+                                queue.push(west);
+                            }
+
+                            edited_chunks.insert(&chunk);
+                        }
+
+                        for(Chunk* c : edited_chunks) {
+                            c->create_vertices(core);
+                        }
+
+                        core.insert_action(action);
+                    }
+
+                    core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = false;
+                    break;
+                }
             }
         }
 

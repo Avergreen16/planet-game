@@ -25,6 +25,7 @@ struct Vertex {
 struct Buffer {
     GLuint vertex_array;
     GLuint vertex_buffer;
+    int vertices = 0;
     bool initialized = false;
 
     Buffer(Buffer& a) {
@@ -59,9 +60,10 @@ struct Buffer {
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
     }
 
-    void set_data(void* ptr, size_t size_bytes, GLenum usage = GL_STATIC_DRAW) {
+    void set_data(void* ptr, int num_vertices, int size_per_vertex, GLenum usage = GL_STATIC_DRAW) {
+        vertices = num_vertices;
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        glBufferData(GL_ARRAY_BUFFER, size_bytes, ptr, usage);
+        glBufferData(GL_ARRAY_BUFFER, num_vertices * size_per_vertex, ptr, usage);
     }
 
     void set_attrib(int id, int values, int stride_bytes, int offset_bytes, GLuint type = GL_FLOAT) {

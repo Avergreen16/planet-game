@@ -5,220 +5,25 @@
 #include <deque>
 #include <set>
 #include <any>
+#include <sstream>
 
 time_t get_time() {
     return std::chrono::steady_clock::now().time_since_epoch().count();
 }
 
-// shaders
+std::string get_shader_from_file(char* path) {
+    std::ifstream file;
+    file.open(path);
 
-const char *vs_grid = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
+    if(file.is_open()) {
+        std::stringstream ss;
+        ss << file.rdbuf();
+        return ss.str();
 
-layout(location = 0) uniform mat3 matrix;
-layout(location = 1) uniform vec2 cam_pos;
-
-out vec2 world_coord;
-out ivec2 recentered;
-
-void main() {
-    world_coord = (matrix * vec3(pos, 1.0)).xy;
-    recentered = ivec2(0, 0);
-
-    if(abs(cam_pos.x) > 4096.0) {
-        world_coord.x -= floor(cam_pos.x / 4096.0) * 4096.0;
-        recentered.x = 1;
-    }
-    if(abs(cam_pos.y) > 4096.0) {
-        world_coord.y -= floor(cam_pos.y / 4096.0) * 4096.0;
-        recentered.y = 1;
-    }
-
-    gl_Position = vec4(pos, 0.5, 1.0);
-}
-)""";
-
-const char *fs_grid = R"""(
-#version 460 core
-
-layout(location = 2) uniform int scale;
-
-in vec2 world_coord;
-flat in ivec2 recentered;
-
-out vec4 frag_color;
-
-void main() {
-    float pixel_size = 1.0 / scale;
-
-    ivec2 floor_coord = ivec2(floor(world_coord));
-    
-    float pixel_shift = pixel_size * int(scale >= 16);
-    ivec2 shifted_floor_coord = ivec2(floor(world_coord + pixel_shift));
-
-    float difference_x = world_coord.x - floor_coord.x;
-    float difference_y = world_coord.y - floor_coord.y;
-    
-    if(shifted_floor_coord.y % 16 == 0 && world_coord.y - shifted_floor_coord.y < pixel_size) {
-        if(recentered.y == 0 && shifted_floor_coord.y == 0) {
-            frag_color = vec4(1.0, 0.25, 0.25, 0.5);
-        } else if(shifted_floor_coord.y % 256 == 0) {
-            frag_color = vec4(1.0, 1.0, 0.25, 0.5);
-        } else {
-            if(shifted_floor_coord.x == 0 && world_coord.x - shifted_floor_coord.x < pixel_size) {
-                frag_color = vec4(0.25, 0.25, 1.0, 0.5);
-            } else {
-                frag_color = vec4(0.25, 1.0, 1.0, 0.5);
-            }
-        }
-    } else if(shifted_floor_coord.x % 16 == 0 && world_coord.x - shifted_floor_coord.x < pixel_size) {
-        if(recentered.x == 0 && shifted_floor_coord.x == 0) {
-            frag_color = vec4(0.25, 0.25, 1.0, 0.5);
-        } else if(shifted_floor_coord.x % 256 == 0) {
-            frag_color = vec4(1.0, 1.0, 0.25, 0.5);
-        } else {
-            frag_color = vec4(0.25, 1.0, 1.0, 0.5);
-        }
-    } else if(scale >= 16 && (difference_x < pixel_size || difference_y < pixel_size)) {
-        frag_color = vec4(0.25, 1.0, 1.0, 0.25);
     } else {
-        discard;
+        std::cout << "failed to open file " << path << std::endl;
     }
 }
-)""";
-
-const char *vs_hover = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-layout(location = 0) uniform mat3 pos_matrix;
-layout(location = 1) uniform mat3 cam_matrix;
-layout(location = 2) uniform vec4 in_tex;
-
-out vec2 tex_coords;
-
-void main() {
-    tex_coords = pos * in_tex.zw + in_tex.xy;
-    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
-}
-)""";
-
-const char *fs_hover = R"""(
-#version 460 core
-layout(location = 3) uniform sampler2D active_texture;
-
-in vec2 tex_coords;
-
-out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(texelFetch(active_texture, ivec2(tex_coords), 0).rgb * 0.75 + vec3(0.25, 1.0, 1.0) * 0.25, 0.5);
-}
-)""";
-
-const char *vs_select = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-layout(location = 0) uniform mat3 cam_matrix;
-
-void main() {
-    gl_Position = vec4((cam_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
-}
-)""";
-
-const char *fs_select = R"""(
-#version 460 core
-layout(location = 1) uniform float alpha;
-
-out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(0.25, 1.0, 1.0, alpha);
-}
-)""";
-
-const char *vs_delete = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-
-layout(location = 0) uniform mat3 pos_matrix;
-layout(location = 1) uniform mat3 cam_matrix;
-
-void main() {
-    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
-}
-)""";
-
-const char *fs_delete = R"""(
-#version 460 core
-layout(location = 2) uniform float alpha;
-
-out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(1.0, 0.0, 0.0, alpha);
-}
-)""";
-
-const char *vs_chunk = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-layout(location = 1) in vec2 tex;
-
-layout(location = 0) uniform mat3 pos_matrix;
-layout(location = 1) uniform mat3 cam_matrix;
-
-out vec2 tex_coords;
-
-void main() {
-    tex_coords = tex;
-    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
-}
-)""";
-
-const char *fs_chunk = R"""(
-#version 460 core
-layout(location = 2) uniform sampler2D active_texture;
-
-in vec2 tex_coords;
-
-out vec4 frag_color;
-
-void main() {
-    frag_color = texelFetch(active_texture, ivec2(tex_coords), 0);
-}
-)""";
-
-const char *vs_paste = R"""(
-#version 460 core
-layout(location = 0) in vec2 pos;
-layout(location = 1) in vec2 tex;
-
-layout(location = 0) uniform mat3 pos_matrix;
-layout(location = 1) uniform mat3 cam_matrix;
-
-out vec2 tex_coords;
-
-void main() {
-    tex_coords = tex;
-    gl_Position = vec4((cam_matrix * pos_matrix * vec3(pos, 1.0)).xy, 0.5, 1.0);
-}
-)""";
-
-const char *fs_paste = R"""(
-#version 460 core
-layout(location = 2) uniform sampler2D active_texture;
-
-in vec2 tex_coords;
-
-out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(texelFetch(active_texture, ivec2(tex_coords), 0).rgb * 0.75 + vec3(0.25, 1.0, 1.0) * 0.25, 0.5);
-}
-)""";
 
 struct vec_comp {
     bool operator()(const glm::ivec2 &a, const glm::ivec2 &b) const {
@@ -267,6 +72,12 @@ struct Tile_data {
     glm::ivec2 size;
 };
 
+namespace edit {
+    struct Edit_engine {
+
+    };
+}
+
 struct Chunk;
 
 enum mode {
@@ -296,12 +107,22 @@ struct Edit_tile {
 };
 
 struct Event_edit_tiles {
-    std::vector<Edit_tile> tiles;
+    std::vector<Edit_tile> tiles_changed;
 };
 
-struct Event_change_selection {
+struct Event_select_drag {
+    std::vector<Edit_tile> tiles_changed;
+    std::set<glm::ivec2, vec_comp> selected_tiles;
+    glm::ivec2 selection_size;
+    glm::ivec2 start_bottom_left;
+    glm::ivec2 end_bottom_left;
+};
+
+struct Event_paste {
+    std::vector<Edit_tile> tiles_changed;
+    std::set<glm::ivec2, vec_comp> selected_tiles;
     glm::ivec2 bottom_left;
-    std::set<glm::ivec2> selected_tiles;
+    glm::ivec2 top_right;
 };
 
 enum key_status {
@@ -328,21 +149,21 @@ struct Core {
     glm::ivec2 end_pos = {0, 0};
     glm::ivec2 bottom_left = {0, 0};
     glm::ivec2 top_right = {0, 0};
+    glm::ivec2 prev_bottom_left = {0, 0};
 
-    std::set<glm::ivec2, vec_comp> select_data;
+    std::set<glm::ivec2, vec_comp> selected_tiles;
     glm::ivec2 select_bottom_left = {0, 0};
     glm::ivec2 select_top_right = {0, 0};
 
     Buffer select_buffer;
     Buffer select_mod_buffer;
     bool select_mod_active = false;
-    bool show_select_mod = false;
     bool show_select = false;
 
-    bool reload_select_data_paste = false;
+    bool reload_selected_tiles_paste = false;
 
-    std::set<glm::ivec2, vec_comp> select_data_paste;
-    glm::ivec2 select_data_paste_bottom_left;
+    std::set<glm::ivec2, vec_comp> selected_tiles_paste;
+    glm::ivec2 selected_tiles_paste_bottom_left;
 
     std::vector<std::vector<int>> paste_data;
 
@@ -380,19 +201,19 @@ struct Core {
     glm::ivec2 mouse_pos = {0, 0};
     int scale = 16;
 
-    void insert_edit_event() {
-        if(new_edit_event.tiles.size() != 0) {
+    void insert_event_edit_tiles() {
+        if(new_edit_event.tiles_changed.size() != 0) {
             if(event_queue.size() > pos_in_queue + 1) {
                 event_queue.erase(event_queue.begin() + pos_in_queue + 1, event_queue.end());
             }
             pos_in_queue++;
             event_queue.push_back({new_edit_event, 0});
 
-            new_edit_event.tiles.clear();
+            new_edit_event.tiles_changed.clear();
         }
     }
 
-    void insert_action(Event& e) {
+    void insert_event(Event& e) {
         if(event_queue.size() > pos_in_queue + 1) {
             event_queue.erase(event_queue.begin() + pos_in_queue + 1, event_queue.end());
         }
@@ -400,16 +221,32 @@ struct Core {
         event_queue.push_back(e);
     }
 
-    void update_select_buffer() {   
+    void move_selection(glm::ivec2 dist) {
+        prev_bottom_left = select_bottom_left;
+        select_bottom_left += dist;
+        select_top_right += dist;
+        
+        std::set<glm::ivec2, vec_comp> copied_data = selected_tiles;
+        selected_tiles.clear();
+
+        for(glm::ivec2 v : copied_data) {
+            selected_tiles.insert(v + dist);
+        }
+    }
+
+    void update_select_buffer() {
+        std::cout << "check\n";
+
         std::vector<glm::vec2> vertex_vec;
 
-        for(glm::ivec2 pos : select_data) {
-            vertex_vec.push_back(glm::vec2(pos));
-            vertex_vec.push_back(glm::vec2(pos + glm::ivec2{1, 0}));
-            vertex_vec.push_back(glm::vec2(pos + glm::ivec2{0, 1}));
-            vertex_vec.push_back(glm::vec2(pos + glm::ivec2{0, 1}));
-            vertex_vec.push_back(glm::vec2(pos + glm::ivec2{1, 0}));
-            vertex_vec.push_back(glm::vec2(pos + glm::ivec2{1, 1}));
+        for(glm::ivec2 pos : selected_tiles) {
+            glm::ivec2 new_pos = pos - select_bottom_left;
+            vertex_vec.push_back(glm::vec2(new_pos));
+            vertex_vec.push_back(glm::vec2(new_pos + glm::ivec2{1, 0}));
+            vertex_vec.push_back(glm::vec2(new_pos + glm::ivec2{0, 1}));
+            vertex_vec.push_back(glm::vec2(new_pos + glm::ivec2{0, 1}));
+            vertex_vec.push_back(glm::vec2(new_pos + glm::ivec2{1, 0}));
+            vertex_vec.push_back(glm::vec2(new_pos + glm::ivec2{1, 1}));
         }
 
         select_buffer.bind();
@@ -432,57 +269,115 @@ struct Core {
         select_mod_buffer.set_attrib(0, 2, 2 * sizeof(float), 0);
     }
 
-    void add_select_data(bool reset_boundaries) {
-        if(reset_boundaries || select_data.size() == 0) {
-            select_bottom_left = bottom_left;
-            select_top_right = top_right;
+    void update_select_boundaries(glm::ivec2 new_bottom_left, glm::ivec2 new_top_right) {
+        prev_bottom_left = select_bottom_left;
+        select_bottom_left = new_bottom_left;
+        select_top_right = new_top_right;
+    }
+
+    void insert_event_select_drag() {
+        if(new_edit_event.tiles_changed.size() != 0) {
+            if(event_queue.size() > pos_in_queue + 1) {
+                event_queue.erase(event_queue.begin() + pos_in_queue + 1, event_queue.end());
+            }
+
+            event_queue.push_back(Event());
+            Event& e0 = event_queue[event_queue.size() - 1];
+            e0.id = 1;
+            e0.contents = Event_select_drag();
+                
+            Event_select_drag& e1 = *std::any_cast<Event_select_drag>(&e0.contents);
+
+            e1.tiles_changed = new_edit_event.tiles_changed;
+            e1.start_bottom_left = prev_bottom_left;
+            e1.end_bottom_left = select_bottom_left;
+            e1.selection_size = select_top_right - select_bottom_left + glm::ivec2{1, 1};
+            e1.selected_tiles = selected_tiles;
+
+            new_edit_event.tiles_changed.clear();
+
+            pos_in_queue++;
+        }
+    }
+
+    void insert_event_paste() {
+        if(new_edit_event.tiles_changed.size() != 0) {
+            if(event_queue.size() > pos_in_queue + 1) {
+                event_queue.erase(event_queue.begin() + pos_in_queue + 1, event_queue.end());
+            }
+
+            event_queue.push_back(Event());
+            Event& e0 = event_queue[event_queue.size() - 1];
+            e0.id = 2;
+            e0.contents = Event_paste();
+                
+            Event_paste& e1 = *std::any_cast<Event_paste>(&e0.contents);
+
+            e1.tiles_changed = new_edit_event.tiles_changed;
+            e1.bottom_left = select_bottom_left;
+            e1.top_right = select_top_right;
+            e1.selected_tiles = selected_tiles;
+
+            new_edit_event.tiles_changed.clear();
+
+            pos_in_queue++;
+        }
+    }
+
+    void add_selected_tiles(bool reset_boundaries) {
+        if(reset_boundaries || selected_tiles.size() == 0) {
+            update_select_boundaries(bottom_left, top_right);
         } else {
-            select_bottom_left = glm::ivec2(std::min(select_bottom_left.x, bottom_left.x), std::min(select_bottom_left.y, bottom_left.y));
-            select_top_right = glm::ivec2(std::max(select_top_right.x, top_right.x), std::max(select_top_right.y, top_right.y));
+            update_select_boundaries(glm::ivec2(std::min(select_bottom_left.x, bottom_left.x), std::min(select_bottom_left.y, bottom_left.y)), glm::ivec2(std::max(select_top_right.x, top_right.x), std::max(select_top_right.y, top_right.y)));
         }
 
         bool update_buffer = false;
 
         for(int x = bottom_left.x; x <= top_right.x; x++) {
             for(int y = bottom_left.y; y <= top_right.y; y++) {
-                if(select_data.insert({x, y}).second) {
+                if(selected_tiles.insert({x, y}).second) {
                     update_buffer = true;
                 }
             }
         }
 
-        if(update_buffer) update_select_buffer();
+        if(update_buffer) {
+            update_select_buffer();
+        }
+        
         show_select = true;
     }
 
-    void subtract_select_data() {
-        if(select_data.size() != 0) {
+    void subtract_selected_tiles() {
+        if(selected_tiles.size() != 0) {
             bool update_buffer = false;
 
             for(int x = bottom_left.x; x <= top_right.x; x++) {
                 for(int y = bottom_left.y; y <= top_right.y; y++) {
-                    if(select_data.erase({x, y})) {
+                    if(selected_tiles.erase({x, y})) {
                         update_buffer = true;
                     }
                 }
             }
 
-            if(select_data.size() != 0) {
-                select_bottom_left.y = (*select_data.begin()).y;
-                select_top_right.y = (*prev(select_data.end(), 1)).y;
+            if(selected_tiles.size() != 0) {
+                select_bottom_left.y = (*selected_tiles.begin()).y;
+                select_top_right.y = (*prev(selected_tiles.end(), 1)).y;
 
-                for(glm::ivec2 v : select_data) {
+                for(glm::ivec2 v : selected_tiles) {
                     select_bottom_left.x = std::min(select_bottom_left.x, v.x);
                     select_top_right.x = std::max(select_top_right.x, v.x);
                 }
             }
 
-            if(update_buffer) update_select_buffer();
+            if(update_buffer) {
+                update_select_buffer();
+            }
         }
     }
 
-    void clear_select_data() {
-        select_data.clear();
+    void clear_selected_tiles() {
+        selected_tiles.clear();
     }
 
     void update_paste_buffer() {
@@ -513,20 +408,6 @@ struct Core {
         paste_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
 
         reload_paste_buffer = false;
-    }
-
-    void move_selection(glm::ivec2 dist) {
-        select_bottom_left += dist;
-        select_top_right += dist;
-        
-        std::set<glm::ivec2, vec_comp> copied_data = select_data;
-        select_data.clear();
-
-        for(glm::ivec2 v : copied_data) {
-            select_data.insert(v + dist);
-        }
-
-        update_select_buffer();
     }
 
     void load_paste_data();
@@ -689,6 +570,8 @@ void Core::save_game(std::string address) {
 }
 
 void Core::load_paste_data() {
+    std::cout << "check0\n";
+
     paste_data.clear();
     paste_data.resize(select_top_right.x - select_bottom_left.x + 1);
     tiles_in_paste = 0;
@@ -698,10 +581,12 @@ void Core::load_paste_data() {
     for(int i = 0; i < paste_data.size(); i++) {
         paste_data[i] = std::vector<int>(y_dif);
     }
+    
+    std::cout << "check1\n";
 
     int count = 0;
 
-    for(glm::ivec2 v : select_data) {
+    for(glm::ivec2 v : selected_tiles) {
         int rel_x = v.x - select_bottom_left.x;
         glm::ivec2 chunk_key(v.x >> 4, v.y >> 4);
         if(chunks.contains(chunk_key)) {
@@ -712,6 +597,8 @@ void Core::load_paste_data() {
         }
         count++;
     }
+
+    std::cout << "check2\n";
 
     reload_paste_buffer = true;
 }
@@ -735,7 +622,7 @@ void Core::insert_paste_data(glm::ivec2 paste_loc) {
                 int &target_tile = chunk->tiles[pos_in_chunk.x + (pos_in_chunk.y << 4)];
 
                 if(target_tile != set_tile) {
-                    new_edit_event.tiles.push_back(Edit_tile{insert_loc, target_tile, set_tile});
+                    new_edit_event.tiles_changed.push_back(Edit_tile{insert_loc, target_tile, set_tile});
                     target_tile = set_tile;
 
                     edited_chunks.insert(chunk);
@@ -747,14 +634,12 @@ void Core::insert_paste_data(glm::ivec2 paste_loc) {
     for(Chunk* c : edited_chunks) {
         c->create_vertices(*this);
     }
-
-    insert_edit_event();
 }
 
 void Core::delete_selection(bool update_action) {
     std::set<Chunk*> edited_chunks;
 
-    for(glm::ivec2 v : select_data) {
+    for(glm::ivec2 v : selected_tiles) {
         glm::ivec2 chunk_key(v.x >> 4, v.y >> 4);
 
         if(chunks.contains(chunk_key)) {
@@ -762,7 +647,7 @@ void Core::delete_selection(bool update_action) {
             int pos_in_chunk = (v.x & 15) + ((v.y & 15) << 4);
             int& tile = chunk.tiles[pos_in_chunk];
             if(tile) {
-                new_edit_event.tiles.push_back(Edit_tile{v, tile, 0});
+                new_edit_event.tiles_changed.push_back(Edit_tile{v, tile, 0});
                 tile = 0;
             }
 
@@ -775,7 +660,28 @@ void Core::delete_selection(bool update_action) {
     }
 
     if(update_action) {
-        insert_edit_event();
+        // backspace event
+        if(new_edit_event.tiles_changed.size() != 0) {
+            if(event_queue.size() > pos_in_queue + 1) {
+                event_queue.erase(event_queue.begin() + pos_in_queue + 1, event_queue.end());
+            }
+
+            event_queue.push_back(Event());
+            Event& e0 = event_queue[event_queue.size() - 1];
+            e0.id = 3;
+            e0.contents = Event_paste();
+                
+            Event_paste& e1 = *std::any_cast<Event_paste>(&e0.contents);
+
+            e1.tiles_changed = new_edit_event.tiles_changed;
+            e1.bottom_left = select_bottom_left;
+            e1.top_right = select_top_right;
+            e1.selected_tiles = selected_tiles;
+
+            new_edit_event.tiles_changed.clear();
+
+            pos_in_queue++;
+        }
     }
 }
 
@@ -797,15 +703,19 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 switch(core.active_edit_mode) {
                     case SELECT: {
                         core.show_select = false;
-                        core.show_select_mod = false;
-                        core.clear_select_data();
+                        core.clear_selected_tiles();
+                        break;
                     }
                     case PASTE: {
                         if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
-                            core.insert_paste_data(core.bottom_left);
+                            core.insert_paste_data(core.select_bottom_left);
+                            core.insert_event_paste();
                         } else {
                             core.insert_paste_data(core.paste_offset + core.mouse_tile);
+                            core.move_selection(core.paste_offset + core.mouse_tile - core.select_bottom_left);
+                            core.insert_event_select_drag();
                         }
+                        break;
                     }
                 }
                 core.active_edit_mode = SET;
@@ -815,24 +725,23 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 core.active_mode = EDIT;
             } else {
                 core.active_mode = VIEW;
-                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON && core.new_edit_event.tiles.size() != 0) {
-                    core.insert_edit_event();
+                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON && core.new_edit_event.tiles_changed.size() != 0) {
+                    core.insert_event_edit_tiles();
                 }
             }
         } else if(key == GLFW_KEY_F) {
             switch(core.active_edit_mode) {
                 case SET:
                     core.active_edit_mode = FILL;
-                    core.insert_edit_event();
+                    core.insert_event_edit_tiles();
                     break;
                 case FILL:
                     core.active_edit_mode = SELECT;
                     break;
                 case SELECT:
                     core.select_mod_active = false;
-                    core.show_select_mod = false;
                     core.show_select = false;
-                    core.clear_select_data();
+                    core.clear_selected_tiles();
                     core.active_edit_mode = SET;
                     break;
                 case PASTE:
@@ -856,7 +765,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                             std::set<Chunk*> edited_chunks;
 
-                            for(auto t = --e.tiles.end(); t != --e.tiles.begin(); --t) {
+                            for(auto t = --e.tiles_changed.end(); t != --e.tiles_changed.begin(); --t) {
                                 Chunk& chunk = core.chunks[t->loc >> 4];
                                 chunk.tiles[(t->loc.x & 15) + ((t->loc.y & 15) << 4)] = t->prev;
                                 edited_chunks.insert(&chunk);
@@ -865,11 +774,87 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             for(Chunk* c : edited_chunks) {
                                 c->create_vertices(core);
                             }
+
+                            core.show_select = false;
+                            core.selected_tiles.clear();
+
+                            break;
                         }
                         case 1: {
-                            Event_change_selection& e = *std::any_cast<Event_change_selection>(&event.contents);
+                            Event_select_drag& e = *std::any_cast<Event_select_drag>(&event.contents);
 
-                            
+                            core.selected_tiles = e.selected_tiles;
+
+                            core.move_selection(e.start_bottom_left - e.end_bottom_left);
+                            core.update_select_buffer();
+
+                            core.active_edit_mode = SELECT;
+                            core.show_select = true;
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(auto t = --e.tiles_changed.end(); t != --e.tiles_changed.begin(); --t) {
+                                Chunk& chunk = core.chunks[t->loc >> 4];
+                                chunk.tiles[(t->loc.x & 15) + ((t->loc.y & 15) << 4)] = t->prev;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            break;
+                        }
+                        case 2: {
+                            Event_paste& e = *std::any_cast<Event_paste>(&event.contents);
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(auto t = --e.tiles_changed.end(); t != --e.tiles_changed.begin(); --t) {
+                                Chunk& chunk = core.chunks[t->loc >> 4];
+                                chunk.tiles[(t->loc.x & 15) + ((t->loc.y & 15) << 4)] = t->prev;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            core.show_select = false;
+                            core.selected_tiles.clear();
+
+                            break;
+                        }
+                        case 3: {
+                            Event_paste& e = *std::any_cast<Event_paste>(&event.contents);
+
+                            core.select_bottom_left = e.bottom_left;
+                            core.select_top_right = e.top_right;
+                            core.selected_tiles = e.selected_tiles;
+                            core.active_edit_mode = SELECT;
+                            core.show_select = true;
+
+                            core.update_select_buffer();
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(auto t = --e.tiles_changed.end(); t != --e.tiles_changed.begin(); --t) {
+                                Chunk& chunk = core.chunks[t->loc >> 4];
+                                chunk.tiles[(t->loc.x & 15) + ((t->loc.y & 15) << 4)] = t->prev;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            break;
                         }
                     }
 
@@ -886,7 +871,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                             std::set<Chunk*> edited_chunks;
 
-                            for(Edit_tile& t : e.tiles) {
+                            for(Edit_tile& t : e.tiles_changed) {
                                 Chunk& chunk = core.chunks[t.loc >> 4];
                                 chunk.tiles[(t.loc.x & 15) + ((t.loc.y & 15) << 4)] = t.set;
                                 edited_chunks.insert(&chunk);
@@ -895,36 +880,111 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             for(Chunk* c : edited_chunks) {
                                 c->create_vertices(core);
                             }
+                            break;
                         }
                         case 1: {
-                            Event_change_selection& e = *std::any_cast<Event_change_selection>(&event.contents);
+                            Event_select_drag& e = *std::any_cast<Event_select_drag>(&event.contents);
+
+                            core.select_bottom_left = e.end_bottom_left;
+                            core.select_top_right = e.end_bottom_left + e.selection_size + glm::ivec2{-1, -1};
+                            core.selected_tiles = e.selected_tiles;
+                            core.active_edit_mode = SELECT;
+                            core.show_select = true;
+
+                            core.update_select_buffer();
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(Edit_tile& t : e.tiles_changed) {
+                                Chunk& chunk = core.chunks[t.loc >> 4];
+                                chunk.tiles[(t.loc.x & 15) + ((t.loc.y & 15) << 4)] = t.set;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            break;
+                        }
+                        case 2: {
+                            Event_paste& e = *std::any_cast<Event_paste>(&event.contents);
+
+                            core.select_bottom_left = e.bottom_left;
+                            core.select_top_right = e.top_right;
+                            core.selected_tiles = e.selected_tiles;
+                            core.active_edit_mode = SELECT;
+                            core.show_select = true;
+
+                            core.update_select_buffer();
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(Edit_tile& t : e.tiles_changed) {
+                                Chunk& chunk = core.chunks[t.loc >> 4];
+                                chunk.tiles[(t.loc.x & 15) + ((t.loc.y & 15) << 4)] = t.set;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            break;
+                        }
+                        case 3: {
+                            Event_paste& e = *std::any_cast<Event_paste>(&event.contents);
+
+                            //
+
+                            std::set<Chunk*> edited_chunks;
+
+                            for(Edit_tile& t : e.tiles_changed) {
+                                Chunk& chunk = core.chunks[t.loc >> 4];
+                                chunk.tiles[(t.loc.x & 15) + ((t.loc.y & 15) << 4)] = t.set;
+                                edited_chunks.insert(&chunk);
+                            }
+
+                            for(Chunk* c : edited_chunks) {
+                                c->create_vertices(core);
+                            }
+
+                            core.show_select = false;
+                            core.selected_tiles.clear();
+
+                            break;
                         }
                     }
                 }
             } else if(key == GLFW_KEY_C) {
                 if(core.show_select == true) {
                     core.load_paste_data();
-                    core.select_data_paste = core.select_data;
-                    core.select_data_paste_bottom_left = core.select_bottom_left;
+                    core.selected_tiles_paste = core.selected_tiles;
+                    core.selected_tiles_paste_bottom_left = core.select_bottom_left;
                 }
             } else if(key == GLFW_KEY_V) {
                 if(core.active_mode == EDIT && core.paste_data.size() != 0) {
                     switch(core.active_edit_mode) {
                         case SET: {
-                            core.insert_edit_event();
+                            core.insert_event_edit_tiles();
                             break;
                         }
                         case SELECT: {
                             core.select_mod_active = false;
-                            core.show_select_mod = false;
                             core.show_select = false;
                             break;
                         }
                         case PASTE: {
                             if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
                                 core.insert_paste_data(core.select_bottom_left);
+                                core.insert_event_select_drag();
                             } else {
                                 core.insert_paste_data(core.paste_offset + core.mouse_tile);
+                                core.insert_event_select_drag();
                             }
                             break;
                         }
@@ -932,8 +992,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                     core.paste_offset = -glm::ivec2{core.paste_data.size(), core.paste_data[0].size()} / 2;
 
-                    core.select_data = core.select_data_paste;
-                    core.select_bottom_left = core.select_data_paste_bottom_left;
+                    core.selected_tiles = core.selected_tiles_paste;
+                    core.select_bottom_left = core.selected_tiles_paste_bottom_left;
                     core.move_selection(core.mouse_tile + core.paste_offset - core.select_bottom_left);
                     core.update_select_buffer();
 
@@ -1017,25 +1077,22 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         }
         if(button == GLFW_MOUSE_BUTTON_LEFT && core.active_mode == EDIT) {
             if(core.active_edit_mode == SET) {
-                core.insert_edit_event();
+                core.insert_event_edit_tiles();
             } else if(core.active_edit_mode == SELECT) {
                 if(core.keymap[GLFW_KEY_LEFT_SHIFT] == PRESS_ON) {
-                    core.add_select_data(false);
+                    core.add_selected_tiles(false);
                 } else if(core.keymap[GLFW_KEY_LEFT_CONTROL] == PRESS_ON) {
-                    core.subtract_select_data();
+                    core.subtract_selected_tiles();
                 } else {
-                    core.clear_select_data();
+                    core.clear_selected_tiles();
                     if(core.start_pos != core.end_pos) {
-                        core.add_select_data(true);
+                        core.add_selected_tiles(true);
                     } else {
-                        core.update_select_buffer();
+                        core.show_select = false;
                     }
-                }
+                } // flag :)
 
                 core.select_mod_active = false;
-                core.show_select_mod = false;
-
-
             }
         }
     }
@@ -1093,22 +1150,22 @@ int main() {
     core.paste_buffer.init();
 
     Shader grid_shader;
-    grid_shader.compile(vs_grid, fs_grid);
+    grid_shader.compile(get_shader_from_file("res\\shaders\\grid.vs").data(), get_shader_from_file("res\\shaders\\grid.fs").data());
 
     Shader hover_shader;
-    hover_shader.compile(vs_hover, fs_hover);
+    hover_shader.compile(get_shader_from_file("res\\shaders\\hover.vs").data(), get_shader_from_file("res\\shaders\\hover.fs").data());
 
     Shader chunk_shader;
-    chunk_shader.compile(vs_chunk, fs_chunk);
+    chunk_shader.compile(get_shader_from_file("res\\shaders\\chunk.vs").data(), get_shader_from_file("res\\shaders\\chunk.fs").data());
 
     Shader delete_shader;
-    delete_shader.compile(vs_delete, fs_delete);
+    delete_shader.compile(get_shader_from_file("res\\shaders\\delete.vs").data(), get_shader_from_file("res\\shaders\\delete.fs").data());
 
     Shader select_shader;
-    select_shader.compile(vs_select, fs_select);
+    select_shader.compile(get_shader_from_file("res\\shaders\\select.vs").data(), get_shader_from_file("res\\shaders\\select.fs").data());
 
     Shader paste_shader;
-    paste_shader.compile(vs_paste, fs_paste);
+    paste_shader.compile(get_shader_from_file("res\\shaders\\paste.vs").data(), get_shader_from_file("res\\shaders\\paste.fs").data());
 
     // set up stbi and load textures
     stbi_set_flip_vertically_on_load(true);
@@ -1162,7 +1219,7 @@ int main() {
                             int &focus_tile = chunk->tiles[(core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4)];
 
                             if(focus_tile != core.active_tile_id) {
-                                core.new_edit_event.tiles.push_back(Edit_tile(core.mouse_tile, focus_tile, core.active_tile_id));
+                                core.new_edit_event.tiles_changed.push_back(Edit_tile(core.mouse_tile, focus_tile, core.active_tile_id));
 
                                 focus_tile = core.active_tile_id;
                                 chunk->create_vertices(core);
@@ -1203,7 +1260,7 @@ int main() {
                                         counter++;
 
                                         tile = core.active_tile_id;
-                                        core.new_edit_event.tiles.push_back(Edit_tile(current_loc, focus_id, core.active_tile_id));
+                                        core.new_edit_event.tiles_changed.push_back(Edit_tile(current_loc, focus_id, core.active_tile_id));
 
                                         glm::ivec2 north = current_loc;
                                         glm::ivec2 east = current_loc;
@@ -1228,7 +1285,7 @@ int main() {
                                     c->create_vertices(core);
                                 }
 
-                                core.insert_edit_event();
+                                core.insert_event_edit_tiles();
                             }
 
                             core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
@@ -1236,7 +1293,7 @@ int main() {
                         }
 
                         case SELECT: {
-                            if(core.show_select && !core.select_mod_active && core.keymap[GLFW_KEY_LEFT_SHIFT] != PRESS_ON && core.keymap[GLFW_KEY_LEFT_CONTROL] != PRESS_ON && core.select_data.contains(core.mouse_tile)) {
+                            if(core.show_select && !core.select_mod_active && core.keymap[GLFW_KEY_LEFT_SHIFT] != PRESS_ON && core.keymap[GLFW_KEY_LEFT_CONTROL] != PRESS_ON && core.selected_tiles.contains(core.mouse_tile)) {
                                 core.select_drag = true;
                                 core.paste_offset = core.select_bottom_left - core.mouse_tile;
 
@@ -1263,7 +1320,6 @@ int main() {
                                 core.top_right = glm::ivec2(std::max(core.start_pos.x, core.end_pos.x), std::max(core.start_pos.y, core.end_pos.y));
 
                                 core.select_mod_active = true;
-                                core.show_select_mod = true;
 
                                 core.update_select_mod_buffer();
 
@@ -1273,12 +1329,14 @@ int main() {
                         }
 
                         case PASTE: {
-                            if(core.select_data.contains(core.mouse_tile)) {
+                            if(core.selected_tiles.contains(core.mouse_tile)) {
                                 core.paste_offset = core.select_bottom_left - core.mouse_tile;
 
                                 core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             } else {
                                 core.insert_paste_data(core.select_bottom_left);
+
+                                core.insert_event_paste();
 
                                 core.active_edit_mode = SET;
                                 core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
@@ -1298,6 +1356,8 @@ int main() {
 
                             core.insert_paste_data(core.select_bottom_left);
 
+                            core.insert_event_select_drag();
+
                             //
 
                             core.select_drag = false;
@@ -1313,11 +1373,13 @@ int main() {
                 }
 
                 if(core.keymap_mouse[GLFW_MOUSE_BUTTON_MIDDLE] == PRESS_ON) {
-                    glm::ivec2 chunk_key = core.mouse_tile >> 4;
-                    if(core.chunks.contains(chunk_key)) {
-                        core.active_tile_id = core.chunks[chunk_key].tiles[(core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4)];
-                    } else {
-                        core.active_tile_id = 0;
+                    if(core.active_mode == EDIT) {
+                        glm::ivec2 chunk_key = core.mouse_tile >> 4;
+                        if(core.chunks.contains(chunk_key)) {
+                            core.active_tile_id = core.chunks[chunk_key].tiles[(core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4)];
+                        } else {
+                            core.active_tile_id = 0;
+                        }
                     }
                 }
             }
@@ -1377,21 +1439,26 @@ int main() {
                     }
                     glDrawArrays(GL_TRIANGLES, 0, 6);
                 } else if(core.active_edit_mode == SELECT) {
-                    if(core.show_select_mod) {
+                    if(core.select_mod_active) {
                         core.select_mod_buffer.bind();
 
                         select_shader.use();
-                        glUniformMatrix3fv(0, 1, false, &cam_matrix[0][0]);
-                        glUniform1f(1, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+
+                        glUniformMatrix3fv(0, 1, false, &identity_matrix[0][0]);
+                        glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
+                        glUniform1f(2, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                         glDrawArrays(GL_TRIANGLES, 0, 6);
                     }
                     if(core.show_select) {
+                        glm::mat3 pos_matrix = glm::translate(identity_matrix, glm::vec2(core.select_bottom_left));
+
                         core.select_buffer.bind();
 
                         select_shader.use();
-                        glUniformMatrix3fv(0, 1, false, &cam_matrix[0][0]);
-                        glUniform1f(1, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+                        glUniformMatrix3fv(0, 1, false, &pos_matrix[0][0]);
+                        glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
+                        glUniform1f(2, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                         glDrawArrays(GL_TRIANGLES, 0, core.select_buffer.vertices);
                     }
@@ -1419,7 +1486,8 @@ int main() {
                         core.select_buffer.bind();
 
                         select_shader.use();
-                        glUniformMatrix3fv(0, 1, false, &cam_matrix[0][0]);
+                        glUniformMatrix3fv(0, 1, false, &paste_matrix[0][0]);
+                        glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
                         glUniform1f(1, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                         glDrawArrays(GL_TRIANGLES, 0, core.select_buffer.vertices);

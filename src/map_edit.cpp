@@ -68,6 +68,7 @@ Vertex_0 tile_vertices[] = {
 };
 
 struct Tile_data {
+    int type;
     glm::ivec2 loc;
     glm::ivec2 size;
 };
@@ -125,6 +126,11 @@ struct Event_paste {
     glm::ivec2 top_right;
 };
 
+struct Paste_data {
+    std::vector<std::vector<int>> data;
+    int tile_count = 0;
+};
+
 enum key_status {
     PRESS_ON,
     PRESS_OFF,
@@ -165,12 +171,12 @@ struct Core {
     std::set<glm::ivec2, vec_comp> selected_tiles_paste;
     glm::ivec2 selected_tiles_paste_bottom_left;
 
-    std::vector<std::vector<int>> paste_data;
+    Paste_data paste_data0;
+    Paste_data paste_data1;
 
 
     bool select_drag = false;
 
-    int tiles_in_paste = 0;
     bool reload_paste_buffer = true;
     Buffer paste_buffer;
     glm::ivec2 paste_offset = {0, 0};
@@ -182,7 +188,8 @@ struct Core {
 
     std::map<int, key_status> keymap = { 
         {GLFW_KEY_LEFT_CONTROL, UP_OFF},
-        {GLFW_KEY_LEFT_SHIFT, UP_OFF}
+        {GLFW_KEY_LEFT_SHIFT, UP_OFF},
+        {GLFW_KEY_ESCAPE, UP_OFF}
     };
 
     std::map<int, key_status> keymap_mouse = { 
@@ -235,8 +242,6 @@ struct Core {
     }
 
     void update_select_buffer() {
-        std::cout << "check\n";
-
         std::vector<glm::vec2> vertex_vec;
 
         for(glm::ivec2 pos : selected_tiles) {
@@ -376,17 +381,13 @@ struct Core {
         }
     }
 
-    void clear_selected_tiles() {
-        selected_tiles.clear();
-    }
-
-    void update_paste_buffer() {
-        std::vector<Vertex_0> vertex_vec(tiles_in_paste * 6);
+    void update_paste_buffer(Paste_data& paste_data) {
+        std::vector<Vertex_0> vertex_vec(paste_data.tile_count * 6);
         int i = 0;
 
-        for(int x = 0; x < paste_data.size(); x++) {
-            for(int y = 0; y < paste_data[0].size(); y++) {
-                int tile = paste_data[x][y];
+        for(int x = 0; x < paste_data.data.size(); x++) {
+            for(int y = 0; y < paste_data.data[0].size(); y++) {
+                int tile = paste_data.data[x][y];
                 if(tile) {
 
                     Tile_data &current_tile_data = tile_data[tile];
@@ -406,13 +407,11 @@ struct Core {
         paste_buffer.set_data(vertex_vec.data(), vertex_vec.size(), sizeof(Vertex_0));
         paste_buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
         paste_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
-
-        reload_paste_buffer = false;
     }
 
-    void load_paste_data();
+    void load_paste_data(Paste_data& data);
 
-    void insert_paste_data(glm::ivec2 paste_loc);
+    void insert_paste_data(glm::ivec2 paste_loc, Paste_data& data);
 
     void delete_selection(bool update_action);
 
@@ -422,7 +421,7 @@ struct Core {
 };
 
 struct Chunk {
-    std::array<int, 256> tiles;
+    std::array<uint16_t, 512> tiles;
     glm::ivec2 pos;
 
     Buffer buffer;
@@ -442,12 +441,13 @@ struct Chunk {
 
         std::vector<Vertex_0> vertex_vec;
 
-        for(int i = 0; i < 256; i++) {
+        for(int i = 0; i < 512; i++) {
             int tile = tiles[i];
+
             if(tile) {
                 Tile_data &current_tile_data = core.tile_data[tile];
                 int x = i % 16;
-                int y = i / 16;
+                int y = (i / 16) % 16;
 
                 vertex_vec.push_back(Vertex_0{x, y, current_tile_data.loc.x, current_tile_data.loc.y});
                 vertex_vec.push_back(Vertex_0{x + 1, y, current_tile_data.loc.x + current_tile_data.size.x, current_tile_data.loc.y});
@@ -479,7 +479,7 @@ void Core::load_data() {
             } else if(strcmp(string, "tile") == 0) {
                 int tile_pos = tile_data.size();
                 tile_data.push_back(Tile_data());
-                data >> tile_data[tile_pos].loc.x >> tile_data[tile_pos].loc.y >> tile_data[tile_pos].size.x >> tile_data[tile_pos].size.y;
+                data >> tile_data[tile_pos].type >> tile_data[tile_pos].loc.x >> tile_data[tile_pos].loc.y >> tile_data[tile_pos].size.x >> tile_data[tile_pos].size.y;
 
                 max_tile_id++;
             } else {
@@ -488,101 +488,115 @@ void Core::load_data() {
             }
         }
         data.close();
-    }
-    else {
+    } else {
         std::cout << "unable to open data.txt" << std::endl;
     }
 
     std::ifstream save;
-    save.open("output\\save.txt");
+    save.open("res\\save.bin", std::ios::in | std::ios::binary);
 
     if(save.is_open()) {
-        char string[64];
+        uint16_t info_id;
         bool end = false;
         while (!end) {
-            save >> string;
-            if(strcmp(string, "end") == 0) {
+            save.read((char*)&info_id, 2);
+
+            if(info_id == (uint16_t)0xFFFF) {
                 end = true;
-            } else if(strcmp(string, "chunk") == 0) {
+            } else if(info_id == (uint16_t)0x0000) {
                 glm::ivec2 loc;
-                save >> loc.x >> loc.y;
+                save.read((char*)&loc, 8);
 
                 chunks.insert({loc, Chunk(loc)});
+
                 Chunk& chunk = chunks[loc];
 
-                // save.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
                 int i = 0;
-                for(; i < 256;) {
-                    int id;
-                    int count;
-                    save >> id >> count;
 
-                    int start = i;
-                    for(; i < start + count;) {
-                        chunk.tiles[i] = id;
-                        i++;
+                while(i < 512) {
+                    uint16_t id;
+                    uint16_t count;
+
+                    save.read((char*)&id, 2);
+                    save.read((char*)&count, 2);
+
+                    for(int j = 0; j < count; j++) {
+                        chunk.tiles[i + j] = id;
                     }
+
+                    i += count;
                 }
             } else {
                 end = true;
-                std::cout << "error reading data.txt" << std::endl;
+                std::cout << "input error" << std::endl;
             }
         }
         save.close();
-    }
-    else {
-        std::cout << "unable to open save.txt" << std::endl;
+    } else {
+        std::cout << "unable to open save.bin" << std::endl;
     }
 }
 
 void Core::save_game(std::string address) {
     std::ofstream output;
-    output.open(address);
+    output.open(address, std::ios::out | std::ios::trunc | std::ios::binary);
 
-    std::string output_string = "";
-    for(auto& [key, chunk] : chunks) {
-        std::string chunk_line = "chunk ";
-        chunk_line += std::to_string(chunk.pos.x) + " " + std::to_string(chunk.pos.y);
+    std::vector<uint16_t> byte_vec;
 
-        int counter = 0;
-        int current_id = chunk.tiles[0];
-        for(int i = 0; i < 256; i++) {
-            int id = chunk.tiles[i];
+    if(output.is_open()) {
+        for(auto& [key, chunk] : chunks) {
+            std::vector<uint16_t> chunk_byte_vec;
 
-            if(id != current_id) {
-                chunk_line += " " + std::to_string(current_id) + " " + std::to_string(counter);
-                counter = 0;
-                current_id = id;
+            chunk_byte_vec.push_back((uint16_t)0);
+            chunk_byte_vec.push_back(chunk.pos.x & 0xFFFF);
+            chunk_byte_vec.push_back(chunk.pos.x >> 16);
+            chunk_byte_vec.push_back(chunk.pos.y & 0xFFFF);
+            chunk_byte_vec.push_back(chunk.pos.y >> 16);
+
+            uint16_t id = chunk.tiles[0];
+            uint16_t count = 0;
+            for(int i = 0; i < 512; i++) {
+                int current_id = chunk.tiles[i];
+
+                if(id != current_id) {
+                    chunk_byte_vec.push_back(id);
+                    chunk_byte_vec.push_back(count);
+                    id = current_id;
+                    count = 0;
+                }
+
+                count++;
             }
-            counter++;
-        }
-        chunk_line += " " + std::to_string(current_id) + " " + std::to_string(counter);
+            if(!(id == 0 && count == 512)) {
+                for(uint16_t v : chunk_byte_vec) {
+                    byte_vec.push_back(v);
+                }
 
-        chunk_line += "\n";
-        if(!(current_id == 0 && counter == 256)) {
-            output_string += chunk_line;
+                byte_vec.push_back(id);
+                byte_vec.push_back(count);
+            }
         }
+    } else {
+        std::cout << "output error" << std::endl;
     }
-    output_string += "end";
-    output << output_string;
+
+    byte_vec.push_back((uint16_t)0xFFFF);
+
+    output.write((const char*)byte_vec.data(), byte_vec.size() * 2);
+
     output.close();
 }
 
-void Core::load_paste_data() {
-    std::cout << "check0\n";
-
-    paste_data.clear();
-    paste_data.resize(select_top_right.x - select_bottom_left.x + 1);
-    tiles_in_paste = 0;
+void Core::load_paste_data(Paste_data& paste_data) {
+    paste_data.data.clear();
+    paste_data.data.resize(select_top_right.x - select_bottom_left.x + 1);
+    paste_data.tile_count = 0;
 
     int y_dif = select_top_right.y - select_bottom_left.y + 1;
 
-    for(int i = 0; i < paste_data.size(); i++) {
-        paste_data[i] = std::vector<int>(y_dif);
+    for(int i = 0; i < paste_data.data.size(); i++) {
+        paste_data.data[i] = std::vector<int>(y_dif);
     }
-    
-    std::cout << "check1\n";
 
     int count = 0;
 
@@ -592,23 +606,21 @@ void Core::load_paste_data() {
         if(chunks.contains(chunk_key)) {
             int tile = chunks[chunk_key].tiles[(v.x & 15) + ((v.y & 15) << 4)];
             if(tile)
-                tiles_in_paste++;
-            paste_data[rel_x][v.y - select_bottom_left.y] = tile;
+                paste_data.tile_count++;
+            paste_data.data[rel_x][v.y - select_bottom_left.y] = tile;
         }
         count++;
     }
 
-    std::cout << "check2\n";
-
     reload_paste_buffer = true;
 }
 
-void Core::insert_paste_data(glm::ivec2 paste_loc) {
+void Core::insert_paste_data(glm::ivec2 paste_loc, Paste_data& paste_data) {
     std::set<Chunk*> edited_chunks;
 
-    for(int x = 0; x < paste_data.size(); x++) {
-        for(int y = 0; y < paste_data[0].size(); y++) {
-            int set_tile = paste_data[x][y];
+    for(int x = 0; x < paste_data.data.size(); x++) {
+        for(int y = 0; y < paste_data.data[0].size(); y++) {
+            int set_tile = paste_data.data[x][y];
             if(set_tile) {
                 glm::ivec2 insert_loc(paste_loc.x + x, paste_loc.y + y);
                 glm::ivec2 chunk_key = insert_loc >> 4;
@@ -619,7 +631,7 @@ void Core::insert_paste_data(glm::ivec2 paste_loc) {
 
                 glm::ivec2 pos_in_chunk = insert_loc & 15;
                 Chunk* chunk = &chunks[chunk_key];
-                int &target_tile = chunk->tiles[pos_in_chunk.x + (pos_in_chunk.y << 4)];
+                uint16_t &target_tile = chunk->tiles[pos_in_chunk.x + (pos_in_chunk.y << 4)];
 
                 if(target_tile != set_tile) {
                     new_edit_event.tiles_changed.push_back(Edit_tile{insert_loc, target_tile, set_tile});
@@ -645,7 +657,7 @@ void Core::delete_selection(bool update_action) {
         if(chunks.contains(chunk_key)) {
             Chunk& chunk = chunks[chunk_key];
             int pos_in_chunk = (v.x & 15) + ((v.y & 15) << 4);
-            int& tile = chunk.tiles[pos_in_chunk];
+            uint16_t& tile = chunk.tiles[pos_in_chunk];
             if(tile) {
                 new_edit_event.tiles_changed.push_back(Edit_tile{v, tile, 0});
                 tile = 0;
@@ -693,33 +705,15 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             core.keymap[key] = PRESS_ON;
         } else if(key > 47 && key <= 48 + core.max_tile_id) {
             core.active_tile_id = key - 48;
+        } else if(key == GLFW_KEY_COMMA) {
+            if(core.active_tile_id > 0) core.active_tile_id--;
+        } else if(key == GLFW_KEY_PERIOD) {
+            if(core.active_tile_id < core.max_tile_id) core.active_tile_id++;
         } else if(key == GLFW_KEY_F11) {
             std::vector<uint8_t> vector(core.screen_size.x * core.screen_size.y * 3);
             glReadPixels(0, 0, core.screen_size.x, core.screen_size.y, GL_RGB, GL_UNSIGNED_BYTE, vector.data());
 
             stbi_write_png(("output\\screenshot" + std::to_string(int(get_time() / 100000000)) + ".png").data(), core.screen_size.x, core.screen_size.y, 3, vector.data(), core.screen_size.x * 3);
-        } else if(key == GLFW_KEY_ESCAPE) {
-            if(core.active_mode == EDIT) {
-                switch(core.active_edit_mode) {
-                    case SELECT: {
-                        core.show_select = false;
-                        core.clear_selected_tiles();
-                        break;
-                    }
-                    case PASTE: {
-                        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
-                            core.insert_paste_data(core.select_bottom_left);
-                            core.insert_event_paste();
-                        } else {
-                            core.insert_paste_data(core.paste_offset + core.mouse_tile);
-                            core.move_selection(core.paste_offset + core.mouse_tile - core.select_bottom_left);
-                            core.insert_event_select_drag();
-                        }
-                        break;
-                    }
-                }
-                core.active_edit_mode = SET;
-            }
         } else if(key == GLFW_KEY_P) {
             if(core.active_mode == VIEW) {
                 core.active_mode = EDIT;
@@ -741,7 +735,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 case SELECT:
                     core.select_mod_active = false;
                     core.show_select = false;
-                    core.clear_selected_tiles();
+                    core.selected_tiles.clear();
                     core.active_edit_mode = SET;
                     break;
                 case PASTE:
@@ -960,14 +954,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                         }
                     }
                 }
-            } else if(key == GLFW_KEY_C) {
-                if(core.show_select == true) {
-                    core.load_paste_data();
+            } else if(key == GLFW_KEY_C) { // copy
+                if(core.show_select == true && core.active_edit_mode == SELECT) {
+                    core.load_paste_data(core.paste_data1);
                     core.selected_tiles_paste = core.selected_tiles;
                     core.selected_tiles_paste_bottom_left = core.select_bottom_left;
+
+                    core.reload_paste_buffer = true;
                 }
-            } else if(key == GLFW_KEY_V) {
-                if(core.active_mode == EDIT && core.paste_data.size() != 0) {
+            } else if(key == GLFW_KEY_V) { // paste
+                if(core.active_mode == EDIT && core.paste_data1.data.size() != 0) {
                     switch(core.active_edit_mode) {
                         case SET: {
                             core.insert_event_edit_tiles();
@@ -975,22 +971,27 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                         }
                         case SELECT: {
                             core.select_mod_active = false;
-                            core.show_select = false;
                             break;
                         }
                         case PASTE: {
-                            if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
-                                core.insert_paste_data(core.select_bottom_left);
+                            if(core.select_drag) {
+                                core.insert_paste_data(core.paste_offset + core.mouse_tile, core.paste_data0);
                                 core.insert_event_select_drag();
                             } else {
-                                core.insert_paste_data(core.paste_offset + core.mouse_tile);
-                                core.insert_event_select_drag();
+                                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
+                                    core.insert_paste_data(core.select_bottom_left, core.paste_data1);
+                                    core.insert_event_paste();
+                                } else {
+                                    core.insert_paste_data(core.paste_offset + core.mouse_tile, core.paste_data1);
+                                    core.insert_event_paste();
+                                }
                             }
+                            
                             break;
                         }
                     }
 
-                    core.paste_offset = -glm::ivec2{core.paste_data.size(), core.paste_data[0].size()} / 2;
+                    core.paste_offset = -glm::ivec2{core.paste_data1.data.size(), core.paste_data1.data[0].size()} / 2;
 
                     core.selected_tiles = core.selected_tiles_paste;
                     core.select_bottom_left = core.selected_tiles_paste_bottom_left;
@@ -1000,15 +1001,15 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.active_edit_mode = PASTE;
 
                     if(core.reload_paste_buffer == true) {
-                        core.update_paste_buffer();
+                        core.update_paste_buffer(core.paste_data1);
+                        core.reload_paste_buffer = false;
                     }
                 }
             } else if(key == GLFW_KEY_S) {
-                core.save_game("output\\save.txt");
+                core.save_game("res\\save.bin");
             }
         }
-    }
-    else if(action == GLFW_RELEASE) {
+    } else if(action == GLFW_RELEASE) {
         if(core.keymap.contains(key)) {
             core.keymap[key] = UP_ON;
         }
@@ -1037,8 +1038,7 @@ void scroll_callback(GLFWwindow* window, double x_offset, double y_offset) {
 
         core.chunks_loaded = glm::ivec2(ceil((0.5 * core.screen_size.x) / (core.scale * 16)), ceil((0.5 * core.screen_size.y) / (core.scale * 16)));
         core.reload_active_chunks = true;*/
-    }
-    else if(y_offset < 0) {
+    } else if(y_offset < 0) {
         if(core.scale > 16) {
             core.scale -= 16;
         } else if(core.scale > 1) {
@@ -1070,8 +1070,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if(core.keymap_mouse.contains(button)) {
             core.keymap_mouse[button] = PRESS_ON;
         }
-    }
-    else if(action == GLFW_RELEASE) {
+    } else if(action == GLFW_RELEASE) {
         if(core.keymap_mouse.contains(button)) {
             core.keymap_mouse[button] = UP_ON;
         }
@@ -1084,7 +1083,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                 } else if(core.keymap[GLFW_KEY_LEFT_CONTROL] == PRESS_ON) {
                     core.subtract_selected_tiles();
                 } else {
-                    core.clear_selected_tiles();
+                    core.selected_tiles.clear();
                     if(core.start_pos != core.end_pos) {
                         core.add_selected_tiles(true);
                     } else {
@@ -1206,7 +1205,7 @@ int main() {
             core.mouse_tile = glm::floor(mouse_pos_world);
 
             if(core.active_mode == EDIT) {
-                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON) {
+                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON || core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_OFF) {
                     switch(core.active_edit_mode) {
                         case SET: {
                             glm::ivec2 chunk_key = core.mouse_tile >> 4;
@@ -1215,8 +1214,18 @@ int main() {
                                 core.chunks.insert({chunk_key, Chunk(chunk_key)});
                             }
 
+                            Tile_data& tile_data = core.tile_data[core.active_tile_id];
+                            int pos_in_chunk = (core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4);
                             Chunk* chunk = &core.chunks[chunk_key];
-                            int &focus_tile = chunk->tiles[(core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4)];
+
+                            if(core.active_tile_id == 0 && core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON) {
+                                if(chunk->tiles[pos_in_chunk + 256]) {
+                                    core.tile_data[0].type = 1;
+                                } else {
+                                    core.tile_data[0].type = 0;
+                                }
+                            }
+                            uint16_t& focus_tile = chunk->tiles[pos_in_chunk + 256 * tile_data.type];
 
                             if(focus_tile != core.active_tile_id) {
                                 core.new_edit_event.tiles_changed.push_back(Edit_tile(core.mouse_tile, focus_tile, core.active_tile_id));
@@ -1224,6 +1233,8 @@ int main() {
                                 focus_tile = core.active_tile_id;
                                 chunk->create_vertices(core);
                             }
+
+                            core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             break;
                         }
 
@@ -1254,7 +1265,7 @@ int main() {
                                     }
                                     Chunk* chunk = &core.chunks[chunk_key];
 
-                                    int &tile = chunk->tiles[(current_loc.x & 15) + ((current_loc.y & 15) << 4)];
+                                    uint16_t& tile = chunk->tiles[(current_loc.x & 15) + ((current_loc.y & 15) << 4)];
 
                                     if(tile == focus_id) {
                                         counter++;
@@ -1299,7 +1310,7 @@ int main() {
 
                                 //
 
-                                core.load_paste_data();
+                                core.load_paste_data(core.paste_data0);
 
                                 core.delete_selection(false);
 
@@ -1307,9 +1318,8 @@ int main() {
 
                                 core.active_edit_mode = PASTE;
 
-                                if(core.reload_paste_buffer == true) {
-                                    core.update_paste_buffer();
-                                }
+                                core.update_paste_buffer(core.paste_data0);
+                                core.reload_paste_buffer = true;
 
                                 core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             } else {
@@ -1334,7 +1344,7 @@ int main() {
 
                                 core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             } else {
-                                core.insert_paste_data(core.select_bottom_left);
+                                core.insert_paste_data(core.select_bottom_left, core.paste_data1);
 
                                 core.insert_event_paste();
 
@@ -1354,7 +1364,7 @@ int main() {
 
                             core.move_selection(distance_moved);
 
-                            core.insert_paste_data(core.select_bottom_left);
+                            core.insert_paste_data(core.select_bottom_left, core.paste_data0);
 
                             core.insert_event_select_drag();
 
@@ -1376,12 +1386,64 @@ int main() {
                     if(core.active_mode == EDIT) {
                         glm::ivec2 chunk_key = core.mouse_tile >> 4;
                         if(core.chunks.contains(chunk_key)) {
-                            core.active_tile_id = core.chunks[chunk_key].tiles[(core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4)];
+                            int loc = (core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4);
+
+                            int id = core.chunks[chunk_key].tiles[loc + 256];
+                            if(id) {
+                                core.active_tile_id = id;
+                            } else {
+                                core.active_tile_id = core.chunks[chunk_key].tiles[loc];
+                            }
                         } else {
                             core.active_tile_id = 0;
                         }
                     }
                 }
+            }
+
+            if(core.keymap[GLFW_KEY_ESCAPE] == PRESS_ON) {
+                if(core.active_mode == EDIT) {
+                    switch(core.active_edit_mode) {
+                        case SELECT: {
+                            core.show_select = false;
+                            core.selected_tiles.clear();
+                            break;
+                        }
+                        case PASTE: {
+                            if(core.select_drag) {
+                                glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
+
+                                core.move_selection(distance_moved);
+
+                                core.insert_paste_data(core.select_bottom_left, core.paste_data0);
+
+                                core.insert_event_select_drag();
+
+                                //
+
+                                core.select_drag = false;
+                            } else {
+                                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_OFF) {
+                                    core.insert_paste_data(core.select_bottom_left, core.paste_data1);
+                                    core.insert_event_paste();
+                                    core.paste_offset = {0, 0};
+                                } else {
+                                    glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
+
+                                    core.move_selection(distance_moved);
+
+                                    core.insert_paste_data(core.select_bottom_left, core.paste_data1);
+
+                                    core.insert_event_paste();
+                                }
+                            }
+                        }
+                    }
+
+                    core.active_edit_mode = SET;
+                }
+
+                core.keymap[GLFW_KEY_ESCAPE] = PRESS_OFF;
             }
 
             if(core.select_mod_active) {
@@ -1488,7 +1550,7 @@ int main() {
                         select_shader.use();
                         glUniformMatrix3fv(0, 1, false, &paste_matrix[0][0]);
                         glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-                        glUniform1f(1, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+                        glUniform1f(2, cos(double((time_container - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                         glDrawArrays(GL_TRIANGLES, 0, core.select_buffer.vertices);
                     }
@@ -1508,7 +1570,7 @@ int main() {
         core.game_running = !glfwWindowShouldClose(window);
     }
 
-    core.save_game("output\\save.txt");
+    core.save_game("res\\save.bin");
 
     glfwTerminate();
 }

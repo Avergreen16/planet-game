@@ -132,10 +132,10 @@ struct Paste_data {
 };
 
 enum key_status {
-    PRESS_ON,
-    PRESS_OFF,
     UP_ON,
-    UP_OFF
+    PRESS_ON,
+    UP_OFF,
+    PRESS_OFF
 };
 
 struct Core {
@@ -149,6 +149,8 @@ struct Core {
 
     mode active_mode = EDIT;
     edit_mode active_edit_mode = SET;
+
+    bool set_active = false;
 
     // used for select
     glm::ivec2 start_pos = {0, 0};
@@ -493,7 +495,7 @@ void Core::load_data() {
     }
 
     std::ifstream save;
-    save.open("res\\save.bin", std::ios::in | std::ios::binary);
+    save.open("saves\\world.bin", std::ios::in | std::ios::binary);
 
     if(save.is_open()) {
         uint16_t info_id;
@@ -533,7 +535,7 @@ void Core::load_data() {
         }
         save.close();
     } else {
-        std::cout << "unable to open save.bin" << std::endl;
+        std::cout << "unable to open save" << std::endl;
     }
 }
 
@@ -713,13 +715,13 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             std::vector<uint8_t> vector(core.screen_size.x * core.screen_size.y * 3);
             glReadPixels(0, 0, core.screen_size.x, core.screen_size.y, GL_RGB, GL_UNSIGNED_BYTE, vector.data());
 
-            stbi_write_png(("output\\screenshot" + std::to_string(int(get_time() / 100000000)) + ".png").data(), core.screen_size.x, core.screen_size.y, 3, vector.data(), core.screen_size.x * 3);
+            stbi_write_png(("screenshots\\screenshot" + std::to_string(int(get_time() / 100000000)) + ".png").data(), core.screen_size.x, core.screen_size.y, 3, vector.data(), core.screen_size.x * 3);
         } else if(key == GLFW_KEY_P) {
             if(core.active_mode == VIEW) {
                 core.active_mode = EDIT;
             } else {
                 core.active_mode = VIEW;
-                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON && core.new_edit_event.tiles_changed.size() != 0) {
+                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] & 1 && core.new_edit_event.tiles_changed.size() != 0) {
                     core.insert_event_edit_tiles();
                 }
             }
@@ -728,6 +730,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 case SET:
                     core.active_edit_mode = FILL;
                     core.insert_event_edit_tiles();
+                    core.set_active = false;
                     break;
                 case FILL:
                     core.active_edit_mode = SELECT;
@@ -749,7 +752,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             }
         }
 
-        if(core.keymap[GLFW_KEY_LEFT_CONTROL] == PRESS_ON) {
+        if(core.keymap[GLFW_KEY_LEFT_CONTROL] & 1) {
             if(key == GLFW_KEY_Z) { // undo
                 if(core.pos_in_queue != -1) {
                     Event& event = core.event_queue[core.pos_in_queue];
@@ -967,6 +970,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     switch(core.active_edit_mode) {
                         case SET: {
                             core.insert_event_edit_tiles();
+                            core.set_active = false;
                             break;
                         }
                         case SELECT: {
@@ -1006,7 +1010,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     }
                 }
             } else if(key == GLFW_KEY_S) {
-                core.save_game("res\\save.bin");
+                core.save_game("saves\\world.bin");
             }
         }
     } else if(action == GLFW_RELEASE) {
@@ -1019,7 +1023,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void cursor_pos_callback(GLFWwindow* window, double x_pos, double y_pos) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
     glm::ivec2 new_pos(x_pos, y_pos);
-    if(core.keymap_mouse[GLFW_MOUSE_BUTTON_RIGHT] == PRESS_ON) {
+    if(core.keymap_mouse[GLFW_MOUSE_BUTTON_RIGHT] & 1) {
         glm::vec2 difference(new_pos - core.mouse_pos);
         core.camera_pos += glm::vec2(-difference.x, difference.y) / float(core.scale);
     }
@@ -1077,10 +1081,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if(button == GLFW_MOUSE_BUTTON_LEFT && core.active_mode == EDIT) {
             if(core.active_edit_mode == SET) {
                 core.insert_event_edit_tiles();
+                core.set_active = false;
             } else if(core.active_edit_mode == SELECT) {
-                if(core.keymap[GLFW_KEY_LEFT_SHIFT] == PRESS_ON) {
+                if(core.keymap[GLFW_KEY_LEFT_SHIFT] & 1) {
                     core.add_selected_tiles(false);
-                } else if(core.keymap[GLFW_KEY_LEFT_CONTROL] == PRESS_ON) {
+                } else if(core.keymap[GLFW_KEY_LEFT_CONTROL] & 1) {
                     core.subtract_selected_tiles();
                 } else {
                     core.selected_tiles.clear();
@@ -1205,9 +1210,11 @@ int main() {
             core.mouse_tile = glm::floor(mouse_pos_world);
 
             if(core.active_mode == EDIT) {
-                if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON || core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_OFF) {
-                    switch(core.active_edit_mode) {
-                        case SET: {
+                switch(core.active_edit_mode) {
+                    case SET: {
+                        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON || (core.set_active && core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_OFF)) {
+                            core.set_active = true;
+
                             glm::ivec2 chunk_key = core.mouse_tile >> 4;
 
                             if(!core.chunks.contains(chunk_key)) {
@@ -1233,12 +1240,12 @@ int main() {
                                 focus_tile = core.active_tile_id;
                                 chunk->create_vertices(core);
                             }
-
-                            core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
-                            break;
                         }
+                        break;
+                    }
 
-                        case FILL: {
+                    case FILL: {
+                        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON) {
                             core.mouse_tile;
 
                             glm::ivec2 chunk_key = core.mouse_tile >> 4;
@@ -1298,12 +1305,12 @@ int main() {
 
                                 core.insert_event_edit_tiles();
                             }
-
-                            core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
-                            break;
                         }
+                        break;
+                    }
 
-                        case SELECT: {
+                    case SELECT: {
+                        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON) {
                             if(core.show_select && !core.select_mod_active && core.keymap[GLFW_KEY_LEFT_SHIFT] != PRESS_ON && core.keymap[GLFW_KEY_LEFT_CONTROL] != PRESS_ON && core.selected_tiles.contains(core.mouse_tile)) {
                                 core.select_drag = true;
                                 core.paste_offset = core.select_bottom_left - core.mouse_tile;
@@ -1320,8 +1327,6 @@ int main() {
 
                                 core.update_paste_buffer(core.paste_data0);
                                 core.reload_paste_buffer = true;
-
-                                core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             } else {
                                 core.start_pos = core.mouse_tile;
                                 core.end_pos = core.mouse_tile;
@@ -1332,71 +1337,63 @@ int main() {
                                 core.select_mod_active = true;
 
                                 core.update_select_mod_buffer();
-
-                                core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             }
-                            break;
                         }
+                        break;
+                    }
 
-                        case PASTE: {
+                    case PASTE: {
+                        if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == PRESS_ON) {
                             if(core.selected_tiles.contains(core.mouse_tile)) {
                                 core.paste_offset = core.select_bottom_left - core.mouse_tile;
 
-                                core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
                             } else {
                                 core.insert_paste_data(core.select_bottom_left, core.paste_data1);
 
                                 core.insert_event_paste();
 
                                 core.active_edit_mode = SET;
-                                core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = PRESS_OFF;
 
                                 core.paste_offset = {0, 0};
                             }
+                        } else if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_ON) {
+                            if(core.select_drag) {
+                                glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
 
-                            break;
-                        }
-                    }
-                } else if(core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] == UP_ON) {
-                    if(core.active_mode == EDIT && core.active_edit_mode == PASTE) {
-                        if(core.select_drag) {
-                            glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
+                                core.move_selection(distance_moved);
 
-                            core.move_selection(distance_moved);
+                                core.insert_paste_data(core.select_bottom_left, core.paste_data0);
 
-                            core.insert_paste_data(core.select_bottom_left, core.paste_data0);
+                                core.insert_event_select_drag();
 
-                            core.insert_event_select_drag();
+                                //
 
-                            //
+                                core.select_drag = false;
+                                core.active_edit_mode = SELECT;
+                            } else {
+                                glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
 
-                            core.select_drag = false;
-                            core.active_edit_mode = SELECT;
-                        } else {
-                            glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
-
-                            core.move_selection(distance_moved);
+                                core.move_selection(distance_moved);
+                            }
                         }
 
-                        core.keymap_mouse[GLFW_MOUSE_BUTTON_LEFT] = UP_OFF;
+                        break;
                     }
                 }
 
                 if(core.keymap_mouse[GLFW_MOUSE_BUTTON_MIDDLE] == PRESS_ON) {
-                    if(core.active_mode == EDIT) {
-                        glm::ivec2 chunk_key = core.mouse_tile >> 4;
-                        if(core.chunks.contains(chunk_key)) {
-                            int loc = (core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4);
+                    glm::ivec2 chunk_key = core.mouse_tile >> 4;
+                    if(core.chunks.contains(chunk_key)) {
+                        int loc = (core.mouse_tile.x & 15) + ((core.mouse_tile.y & 15) << 4);
 
-                            int id = core.chunks[chunk_key].tiles[loc + 256];
-                            if(id) {
-                                core.active_tile_id = id;
-                            } else {
-                                core.active_tile_id = core.chunks[chunk_key].tiles[loc];
-                            }
+                        int id = core.chunks[chunk_key].tiles[loc + 256];
+                        if(id) {
+                            core.active_tile_id = id;
                         } else {
-                            core.active_tile_id = 0;
+                            core.active_tile_id = core.chunks[chunk_key].tiles[loc];
                         }
+                    } else {
+                        core.active_tile_id = 0;
                     }
                 }
             }
@@ -1404,11 +1401,20 @@ int main() {
             if(core.keymap[GLFW_KEY_ESCAPE] == PRESS_ON) {
                 if(core.active_mode == EDIT) {
                     switch(core.active_edit_mode) {
+                        case SET: {
+                            if(core.set_active) {
+                                core.insert_event_edit_tiles();
+                                core.set_active = false;
+                            }                            
+                            break;
+                        }
+
                         case SELECT: {
                             core.show_select = false;
                             core.selected_tiles.clear();
                             break;
                         }
+
                         case PASTE: {
                             if(core.select_drag) {
                                 glm::ivec2 distance_moved = core.mouse_tile + core.paste_offset - core.select_bottom_left;
@@ -1442,8 +1448,6 @@ int main() {
 
                     core.active_edit_mode = SET;
                 }
-
-                core.keymap[GLFW_KEY_ESCAPE] = PRESS_OFF;
             }
 
             if(core.select_mod_active) {
@@ -1454,6 +1458,17 @@ int main() {
 
                     core.update_select_mod_buffer();
                 }
+            }
+            
+            // keymap changes
+
+            for(auto& pair : core.keymap_mouse) {
+                if(pair.second == PRESS_ON) pair.second = PRESS_OFF;
+                else if(pair.second == UP_ON) pair.second = UP_OFF;
+            }
+            for(auto& pair : core.keymap) {
+                if(pair.second == PRESS_ON) pair.second = PRESS_OFF;
+                else if(pair.second == UP_ON) pair.second = UP_OFF;
             }
 
             // -> render
@@ -1570,7 +1585,7 @@ int main() {
         core.game_running = !glfwWindowShouldClose(window);
     }
 
-    core.save_game("res\\save.bin");
+    core.save_game("saves\\world.bin");
 
     glfwTerminate();
 }

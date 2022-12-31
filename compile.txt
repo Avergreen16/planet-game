@@ -2,6 +2,7 @@ g++ src/main.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l 
 
 g++ src/map_edit.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\map_edit
 g++ src/save_translator.cpp -std=c++20 -l mingw32 -o bin\save_translator
+g++ src/double_dabble.cpp -std=c++20 -l mingw32 -o bin\double_dabble
 
 /*const char* vss_raycast = R"""(
 #version 460 core
@@ -130,3 +131,21 @@ glUniform1i(2, 5 * scale);
 screen_buffer.bind();
 glDrawArrays(GL_TRIANGLES, 0, 6);*/
 //
+
+
+219
+0010 0001 1001
+
+0000 0000 0000 < 1101 1011
+0000 0000 0001 < 1011 011
+0000 0000 0011 < 0110 11
+0000 0000 0110 < 1101 1
+0000 0000 1001 + 1101 1
+0000 0001 0011 < 1011
+0000 0010 0111 < 011
+0000 0010 1010 + 011
+0000 0101 0100 < 11
+0000 1000 0100 + 11
+0001 0000 1001 < 1
+0001 0000 1100 + 1
+0010 0001 1001 < 

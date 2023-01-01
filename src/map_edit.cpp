@@ -1191,6 +1191,8 @@ int main() {
         chunk.create_vertices(core);
     }
 
+    core.texture.bind(0);
+
     time_t start_time = get_time();
     time_t time_container = get_time();
 
@@ -1487,7 +1489,6 @@ int main() {
 
             chunk_shader.use();
             glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-            core.texture.bind(0, 2);
             for(auto& [key, chunk] : core.chunks) {
                 glm::mat3 chunk_matrix = glm::translate(identity_matrix, glm::vec2(chunk.pos << 4));
                 glUniformMatrix3fv(0, 1, false, &chunk_matrix[0][0]);
@@ -1512,7 +1513,6 @@ int main() {
                         glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
                         glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
                         glUniform4f(2, core.tile_data[core.active_tile_id].loc.x, core.tile_data[core.active_tile_id].loc.y, core.tile_data[core.active_tile_id].size.x, core.tile_data[core.active_tile_id].size.y);
-                        core.texture.bind(0, 3);
                     }
                     glDrawArrays(GL_TRIANGLES, 0, 6);
                 } else if(core.active_edit_mode == SELECT) {
@@ -1555,7 +1555,6 @@ int main() {
 
                     glUniformMatrix3fv(0, 1, false, &paste_matrix[0][0]);
                     glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-                    core.texture.bind(0, 2);
 
                     glDrawArrays(GL_TRIANGLES, 0, core.paste_buffer.vertices);
 

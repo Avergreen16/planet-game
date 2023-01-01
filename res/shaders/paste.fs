@@ -1,5 +1,5 @@
 #version 460 core
-layout(location = 2) uniform sampler2D active_texture;
+layout(binding = 0) uniform sampler2D active_texture;
 
 in vec2 tex_coords;
 

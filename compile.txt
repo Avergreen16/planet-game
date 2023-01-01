@@ -1,8 +1,10 @@
 g++ src/main.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\main
 
 g++ src/map_edit.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\map_edit
+g++ src/text_engine.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -o bin\text_engine
 g++ src/save_translator.cpp -std=c++20 -l mingw32 -o bin\save_translator
 g++ src/double_dabble.cpp -std=c++20 -l mingw32 -o bin\double_dabble
+g++ src/text_data_translator.cpp -std=c++20 -l mingw32 -o bin\text_data_translator
 
 /*const char* vss_raycast = R"""(
 #version 460 core

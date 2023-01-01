@@ -2,7 +2,7 @@
 
 #include "global.cpp"
 
-struct Vertex {
+/*struct Vertex {
     glm::vec3 position;
     glm::vec2 tex_coord;
     glm::vec2 limit;
@@ -20,7 +20,7 @@ struct Vertex {
         tex_coord = {u, v};
         limit = {lu, lv};
     }
-};
+};*/
 
 struct Buffer {
     GLuint vertex_array;
@@ -169,10 +169,9 @@ struct Texture {
         }
     }
 
-    void bind(int tex_id, int uniform) {
-        glActiveTexture(GL_TEXTURE0 + tex_id);
+    void bind(int binding) {
+        glActiveTexture(GL_TEXTURE0 + binding);
         glBindTexture(GL_TEXTURE_2D, id);
-        glUniform1i(uniform, tex_id);
     }
 
     void bind() {

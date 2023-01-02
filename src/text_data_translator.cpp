@@ -13,6 +13,7 @@ int main() {
     int counter = 0;
     int pos = 0;
     bytes.push_back(9);
+    bytes.push_back(10);
     bytes.push_back(1);
     bytes.push_back(0);
 

@@ -22,9 +22,9 @@ std::string get_shader_from_file(char* path) {
     file.close();
 }
 
-struct Core {
-    glm::ivec2 screen_size = {800, 600};
-    bool game_running = true;
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec2 tex_coords;
 };
 
 struct Glyph_data {
@@ -34,10 +34,192 @@ struct Glyph_data {
     uint8_t tex_width;
 };
 
-struct Vertex {
-    glm::vec2 pos;
-    glm::vec2 tex_coords;
+struct Font_data {
+    uint8_t line_height;
+    uint8_t line_spacing;
+    std::map<char, Glyph_data> glyph_map;
 };
+
+struct Text {
+    glm::ivec2 size = {0, 0};
+    Buffer text_buffer;
+    GLuint color_buffer;
+    std::string text = "";
+    int text_size = 2;
+
+    void init_buffers() {
+        glGenBuffers(1, &color_buffer);
+        text_buffer.init();
+    }
+
+    void load_buffers(Font_data& font, int limit = 0x7FFFFFFF) {
+        size = {0, 0};
+
+        glm::ivec2 loc = {0, 0};
+        int word_loc = 0;
+
+        std::vector<Vertex> vertices;
+        std::vector<glm::vec4> colors;
+
+        std::vector<Vertex> word_vertices;
+        std::string word;
+
+        int space_counter = 0;
+        bool erase_space_counter = false;
+
+        int hue = 0;
+
+        for(char c : text) {
+            if(c == '\n') {
+                for(Vertex& v : word_vertices) {
+                    v.pos += loc;
+                    vertices.push_back(v);
+                }
+                word_vertices.clear();
+                
+                size.x = std::max(size.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride);
+                word_loc = 0;
+                loc.x = 0;
+                loc.y -= font.line_spacing;
+            } else {
+                Glyph_data data = font.glyph_map[c];
+                if(data.visible) {
+                    if(!erase_space_counter) {
+                        loc.x += space_counter * font.glyph_map[' '].stride;
+                        erase_space_counter = true;
+                    }
+
+                    if((word_loc + data.tex_width) * text_size >= limit) {
+                        for(Vertex& v : word_vertices) {
+                            v.pos += loc;
+                            vertices.push_back(v);
+                        }
+                        word_vertices.clear();
+
+                        size.x = std::max(size.x, loc.x + word_loc);
+                        word_loc = 0;
+                        loc.x = 0;
+                        loc.y -= font.line_spacing;
+                    }
+
+                    word_vertices.push_back({{word_loc, 0}, {data.tex_coord, 0}});
+                    word_vertices.push_back({{word_loc + data.tex_width, 0}, {data.tex_coord + data.tex_width, 0}});
+                    word_vertices.push_back({{word_loc, font.line_height}, {data.tex_coord, font.line_height}});
+                    word_vertices.push_back({{word_loc, font.line_height}, {data.tex_coord, font.line_height}});
+                    word_vertices.push_back({{word_loc + data.tex_width, 0}, {data.tex_coord + data.tex_width, 0}});
+                    word_vertices.push_back({{word_loc + data.tex_width, font.line_height}, {data.tex_coord + data.tex_width, font.line_height}});
+
+                    float red = (hue < 60) ? 1.0f : (hue < 120) ? (float(120 - hue) / 60.0f) : (hue < 240) ? 0.0f : (hue < 300) ? (float(hue - 240) / 60.0f) : 1.0f; 
+                    float green = (hue < 60) ? (float(hue) / 60.0f) : (hue < 180) ? 1.0f : (hue < 240) ? (float(240 - hue) / 60.0f) : 0.0f;
+                    float blue = (hue < 120) ? 0.0f : (hue < 180) ? (float(hue - 120) / 60.0f) : (hue < 300) ? 1.0f : (float(360 - hue) / 60.0f);
+
+                    colors.push_back({red, green, blue, 1.0f});
+                    colors.push_back({red, green, blue, 1.0f});
+
+                    hue = (hue + 10) % 360;
+
+                    if((loc.x + word_loc + data.tex_width) * text_size >= limit) {
+                        size.x = std::max(size.x, loc.x - space_counter * font.glyph_map[' '].stride);
+                        loc.x = 0;
+                        loc.y -= font.line_spacing;
+                    }
+                    word_loc += data.stride;
+                } else {
+                    if(erase_space_counter) {
+                        space_counter = 0;
+                        erase_space_counter = false;
+
+                        for(Vertex& v : word_vertices) {
+                            v.pos += loc;
+                            vertices.push_back(v);
+                        }
+                        word_vertices.clear();
+                        loc.x += word_loc;
+                        word_loc = 0;
+                    }
+                    space_counter++;
+                }
+            }
+        }
+        for(Vertex& v : word_vertices) {
+            v.pos += loc;
+            vertices.push_back(v);
+        }
+        loc.x += word_loc;
+
+        for(Vertex& v : vertices) {
+            v.pos *= text_size;
+        }
+
+        size = {std::max(size.x, loc.x), -loc.y + font.line_height};
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, color_buffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, colors.size() * sizeof(glm::vec4), colors.data(), GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, color_buffer);
+
+        text_buffer.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
+        text_buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
+        text_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
+
+        std::cout << size.x << " " << size.y << std::endl;
+    }
+};
+
+struct Core {
+    glm::ivec2 screen_size = {800, 600};
+    bool game_running = true;
+    bool right_shift_pressed = false;
+
+    Shader text_shader;
+
+    Font_data font;
+
+    Text string;
+};
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    core.screen_size.x = width + 1 * (width & 1);
+    core.screen_size.y = height + 1 * (height & 1);
+
+    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+    
+    core.string.load_buffers(core.font, core.screen_size.x - 12);
+}
+
+void char_callback(GLFWwindow* window, unsigned int codepoint) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+
+    char char_codepoint = (char)codepoint;
+    if(core.right_shift_pressed && char_codepoint <= 'F' && char_codepoint >= 'A') char_codepoint += 63;
+    if(core.font.glyph_map.contains(char_codepoint)) {
+        core.string.text += char_codepoint;
+        if(core.font.glyph_map[char_codepoint].visible) {
+            core.string.load_buffers(core.font, core.screen_size.x - 12);
+        }
+    } else {
+        std::cout << (int)char_codepoint << std::endl;
+    }
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    if(key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        int string_length = core.string.text.size();
+        if(string_length != 0) {
+            char last_char = core.string.text[string_length - 1];
+            core.string.text.pop_back();
+            if(core.font.glyph_map.contains(last_char) && core.font.glyph_map[last_char].visible) {
+                core.string.load_buffers(core.font, core.screen_size.x - 12);
+            }
+        }
+    } else if(key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        core.string.text += '\n';
+    } else if(key == GLFW_KEY_RIGHT_SHIFT) {
+        if(action == GLFW_PRESS) core.right_shift_pressed = true;
+        if(action == GLFW_RELEASE) core.right_shift_pressed = false;
+    }
+}
 
 int main() {
     Core core;
@@ -70,16 +252,18 @@ int main() {
 
     glfwSetWindowUserPointer(window, &core);
 
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCharCallback(window, char_callback);
+    glfwSetKeyCallback(window, key_callback);
+
     // loading data
-    
-    uint8_t line_height;
-    std::map<uint8_t, Glyph_data> glyph_map;
 
     std::ifstream file;
     file.open("res\\text_data.bin", std::ios::in | std::ios::binary);
 
     if(file.is_open()) {
-        file.read((char*)&line_height, 1);
+        file.read((char*)&core.font.line_height, 1);
+        file.read((char*)&core.font.line_spacing, 1);
 
         uint16_t space_glyphs;
         file.read((char*)&space_glyphs, 2);
@@ -93,7 +277,7 @@ int main() {
 
             data.visible = false;
 
-            glyph_map.insert({id, data});
+            core.font.glyph_map.insert({id, data});
         }
 
         uint16_t visible_glyphs;
@@ -110,7 +294,7 @@ int main() {
 
             data.visible = true;
 
-            glyph_map.insert({id, data});
+            core.font.glyph_map.insert({id, data});
         }
 
         file.close();
@@ -120,62 +304,16 @@ int main() {
 
     // text mesh generation
 
-    
-    Shader text_shader;
-    text_shader.compile(get_shader_from_file("res\\shaders\\text.vs").data(), get_shader_from_file("res\\shaders\\text.fs").data());
+    core.text_shader.compile(get_shader_from_file("res\\shaders\\text.vs").data(), get_shader_from_file("res\\shaders\\text.fs").data());
 
     stbi_set_flip_vertically_on_load(true);
     Texture text_texture;
     text_texture.load("res\\text.png");
     text_texture.bind(0);
 
-    std::string text = "Hello world!";
-    text += (char)0x80;
-    
-    int text_size = 2;
-    int loc = 0;
-
-    std::vector<Vertex> vertex_vec;
-    std::vector<glm::vec4> color_vec;
-
-    for(char c : text) {
-        Glyph_data data = glyph_map[c];
-
-        if(data.visible) {
-            vertex_vec.push_back({{loc, 0}, {data.tex_coord, 0}});
-            vertex_vec.push_back({{loc + data.tex_width, 0}, {data.tex_coord + data.tex_width, 0}});
-            vertex_vec.push_back({{loc, line_height}, {data.tex_coord, line_height}});
-            vertex_vec.push_back({{loc, line_height}, {data.tex_coord, line_height}});
-            vertex_vec.push_back({{loc + data.tex_width, 0}, {data.tex_coord + data.tex_width, 0}});
-            vertex_vec.push_back({{loc + data.tex_width, line_height}, {data.tex_coord + data.tex_width, line_height}});
-
-            color_vec.push_back({1.0f, 1.0f, 1.0f, 1.0f});
-            color_vec.push_back({1.0f, 1.0f, 1.0f, 1.0f});
-        }
-
-        loc += data.stride;
-    }
-
-    for(Vertex& v : vertex_vec) {
-        v.pos *= text_size;
-    }
-
-    GLuint color_buffer;
-    glGenBuffers(1, &color_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, color_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, color_vec.size() * sizeof(glm::vec4), color_vec.data(), GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, color_buffer);
-
-    Buffer text_buffer;
-    text_buffer.init();
-    text_buffer.set_data(vertex_vec.data(), vertex_vec.size(), sizeof(Vertex));
-    text_buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
-    text_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
+    core.string.init_buffers();
 
     //
-
-    glm::mat3 matrix = glm::translate(matrix, -glm::vec2(core.screen_size / 2));
-    matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(core.screen_size / 2)));
 
     while(core.game_running) {
         glfwPollEvents();
@@ -183,10 +321,13 @@ int main() {
         glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        text_shader.use();
-        text_buffer.bind();
+        glm::mat3 matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(core.screen_size / 2)));
+        matrix = glm::translate(matrix, glm::vec2(-core.screen_size.x / 2 + 6, core.screen_size.y / 2 - core.font.line_height * core.string.text_size - 6));
+
+        core.text_shader.use();
+        core.string.text_buffer.bind();
         glUniformMatrix3fv(0, 1, false, &matrix[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, text_buffer.vertices);
+        glDrawArrays(GL_TRIANGLES, 0, core.string.text_buffer.vertices);
 
         glfwSwapBuffers(window);
 

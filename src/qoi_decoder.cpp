@@ -214,6 +214,12 @@ int main() {
         }
     }
 
-    stbi_write_png(output_path.data(), x, y, c, pixels.data(), x * c);
+    std::ofstream output;
+    output.open(output_path.data(), std::ios::out | std::ios::trunc | std::ios::binary);
+
+    output.write((const char*)pixels.data(), pixels.size());
+
+    output.close();
+    //stbi_write_png(, x, y, c, pixels.data(), x * c);
 }
 

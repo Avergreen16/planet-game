@@ -6,7 +6,7 @@
 
 glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
-std::string get_shader_from_file(char* path) {
+std::string get_text_from_file(char* path) {
     std::ifstream file;
     file.open(path);
 
@@ -37,7 +37,13 @@ struct Glyph_data {
 struct Font_data {
     uint8_t line_height;
     uint8_t line_spacing;
+    Glyph_data empty_data = {false, 0, 0, 0};
     std::map<char, Glyph_data> glyph_map;
+
+    Glyph_data& at(char key) {
+        if(glyph_map.contains(key)) return glyph_map[key];
+        return empty_data;
+    }
 };
 
 struct Text {
@@ -45,7 +51,7 @@ struct Text {
     Buffer text_buffer;
     GLuint color_buffer;
     std::string text = "";
-    int text_size = 2;
+    int text_size = 1;
 
     void init_buffers() {
         glGenBuffers(1, &color_buffer);
@@ -69,15 +75,19 @@ struct Text {
 
         int hue = 0;
 
+        char last_char = '\0';
+        char last_word_char = '\0';
+
         for(char c : text) {
             if(c == '\n') {
                 for(Vertex& v : word_vertices) {
                     v.pos += loc;
                     vertices.push_back(v);
                 }
+                last_word_char = last_char;
                 word_vertices.clear();
                 
-                size.x = std::max(size.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride);
+                size.x = std::max(size.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride - (font.at(last_char).stride - font.at(last_char).tex_width));
                 word_loc = 0;
                 loc.x = 0;
                 loc.y -= font.line_spacing;
@@ -89,15 +99,20 @@ struct Text {
                         erase_space_counter = true;
                     }
 
-                    if((word_loc + data.tex_width) * text_size >= limit) {
+                    if(word_loc > 0 && (word_loc + data.tex_width) * text_size >= limit) {
                         for(Vertex& v : word_vertices) {
                             v.pos += loc;
                             vertices.push_back(v);
                         }
+                        last_word_char = last_char;
                         word_vertices.clear();
 
-                        size.x = std::max(size.x, loc.x + word_loc);
+                        size.x = std::max(size.x, loc.x + word_loc - (font.glyph_map[last_char].stride - font.glyph_map[last_char].tex_width));
                         word_loc = 0;
+                        loc.x = 0;
+                        loc.y -= font.line_spacing;
+                    } else if((loc.x + word_loc + data.tex_width) * text_size >= limit) {
+                        size.x = std::max(size.x, loc.x - space_counter * font.glyph_map[' '].stride - (font.at(last_word_char).stride - font.at(last_word_char).tex_width));
                         loc.x = 0;
                         loc.y -= font.line_spacing;
                     }
@@ -118,12 +133,9 @@ struct Text {
 
                     hue = (hue + 10) % 360;
 
-                    if((loc.x + word_loc + data.tex_width) * text_size >= limit) {
-                        size.x = std::max(size.x, loc.x - space_counter * font.glyph_map[' '].stride);
-                        loc.x = 0;
-                        loc.y -= font.line_spacing;
-                    }
                     word_loc += data.stride;
+
+                    last_char = c;
                 } else {
                     if(erase_space_counter) {
                         space_counter = 0;
@@ -133,6 +145,7 @@ struct Text {
                             v.pos += loc;
                             vertices.push_back(v);
                         }
+                        last_word_char = last_char;
                         word_vertices.clear();
                         loc.x += word_loc;
                         word_loc = 0;
@@ -151,7 +164,7 @@ struct Text {
             v.pos *= text_size;
         }
 
-        size = {std::max(size.x, loc.x), -loc.y + font.line_height};
+        size = {std::max(size.x, loc.x - (font.at(last_char).stride - font.at(last_char).tex_width)), -loc.y + font.line_height};
         
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, color_buffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, colors.size() * sizeof(glm::vec4), colors.data(), GL_DYNAMIC_DRAW);
@@ -304,7 +317,7 @@ int main() {
 
     // text mesh generation
 
-    core.text_shader.compile(get_shader_from_file("res\\shaders\\text.vs").data(), get_shader_from_file("res\\shaders\\text.fs").data());
+    core.text_shader.compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
 
     stbi_set_flip_vertically_on_load(true);
     Texture text_texture;

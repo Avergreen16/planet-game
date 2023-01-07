@@ -8,6 +8,7 @@ g++ src/text_data_translator.cpp -std=c++20 -l mingw32 -o bin\text_data_translat
 g++ src/qoi_encoder.cpp -std=c++20 -I include -l mingw32 -o bin\qoi_encoder
 g++ src/qoi_decoder.cpp -std=c++20 -I include -l mingw32 -o bin\qoi_decoder
 g++ src/binary_comp.cpp -std=c++20 -I include -l mingw32 -o bin\bin_comp
+g++ src/huffman_code.cpp -std=c++20 -I include -l mingw32 -o bin\huffman_code
 g++ src/png_comp.cpp -std=c++20 -I include -l mingw32 -o bin\png_comp
 
 /*const char* vss_raycast = R"""(

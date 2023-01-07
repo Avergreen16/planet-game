@@ -11,7 +11,7 @@ time_t get_time() {
     return std::chrono::steady_clock::now().time_since_epoch().count();
 }
 
-std::string get_shader_from_file(char* path) {
+std::string get_text_from_file(char* path) {
     std::ifstream file;
     file.open(path);
 
@@ -1154,22 +1154,22 @@ int main() {
     core.paste_buffer.init();
 
     Shader grid_shader;
-    grid_shader.compile(get_shader_from_file("res\\shaders\\grid.vs").data(), get_shader_from_file("res\\shaders\\grid.fs").data());
+    grid_shader.compile(get_text_from_file("res\\shaders\\grid.vs").data(), get_text_from_file("res\\shaders\\grid.fs").data());
 
     Shader hover_shader;
-    hover_shader.compile(get_shader_from_file("res\\shaders\\hover.vs").data(), get_shader_from_file("res\\shaders\\hover.fs").data());
+    hover_shader.compile(get_text_from_file("res\\shaders\\hover.vs").data(), get_text_from_file("res\\shaders\\hover.fs").data());
 
     Shader chunk_shader;
-    chunk_shader.compile(get_shader_from_file("res\\shaders\\chunk.vs").data(), get_shader_from_file("res\\shaders\\chunk.fs").data());
+    chunk_shader.compile(get_text_from_file("res\\shaders\\chunk.vs").data(), get_text_from_file("res\\shaders\\chunk.fs").data());
 
     Shader delete_shader;
-    delete_shader.compile(get_shader_from_file("res\\shaders\\delete.vs").data(), get_shader_from_file("res\\shaders\\delete.fs").data());
+    delete_shader.compile(get_text_from_file("res\\shaders\\delete.vs").data(), get_text_from_file("res\\shaders\\delete.fs").data());
 
     Shader select_shader;
-    select_shader.compile(get_shader_from_file("res\\shaders\\select.vs").data(), get_shader_from_file("res\\shaders\\select.fs").data());
+    select_shader.compile(get_text_from_file("res\\shaders\\select.vs").data(), get_text_from_file("res\\shaders\\select.fs").data());
 
     Shader paste_shader;
-    paste_shader.compile(get_shader_from_file("res\\shaders\\paste.vs").data(), get_shader_from_file("res\\shaders\\paste.fs").data());
+    paste_shader.compile(get_text_from_file("res\\shaders\\paste.vs").data(), get_text_from_file("res\\shaders\\paste.fs").data());
 
     // set up stbi and load textures
     stbi_set_flip_vertically_on_load(true);

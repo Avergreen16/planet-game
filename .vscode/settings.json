@@ -83,6 +83,7 @@
         "semaphore": "cpp",
         "cinttypes": "cpp",
         "set": "cpp",
-        "any": "cpp"
+        "any": "cpp",
+        "bitset": "cpp"
     }
 }

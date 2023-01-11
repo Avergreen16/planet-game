@@ -11,4 +11,5 @@ out vec4 frag_color;
 void main() {
     float alpha = texelFetch(text_texture, ivec2(tex_coord), 0).a;
     if(alpha != 0.0) frag_color = colors[gl_PrimitiveID];
+    else discard;
 }

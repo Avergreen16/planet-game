@@ -47,21 +47,21 @@ struct Font_data {
 };
 
 struct Text {
-    glm::ivec2 size = {0, 0};
+    glm::ivec2 dimensions = {0, 0};
     Buffer text_buffer;
-    GLuint color_buffer;
+    Storage_buffer color_buffer;
     std::string text = "";
-    int text_size = 3;
+    int size = 2;
 
-    glm::vec2 position = glm::vec2(0, 0);
+    glm::ivec2 position = {0, 0};
 
     void init_buffers() {
-        glGenBuffers(1, &color_buffer);
+        color_buffer.init();
         text_buffer.init();
     }
 
     void load_buffers(Font_data& font, int limit = 0x7FFFFFFF) {
-        size = {0, 0};
+        dimensions = {0, 0};
 
         glm::ivec2 loc = {0, 0};
         int word_loc = 0;
@@ -89,7 +89,7 @@ struct Text {
                 last_word_char = last_char;
                 word_vertices.clear();
                 
-                size.x = std::max(size.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride - (font.at(last_char).stride - font.at(last_char).tex_width));
+                dimensions.x = std::max(dimensions.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride - (font.at(last_char).stride - font.at(last_char).tex_width));
                 word_loc = 0;
                 loc.x = 0;
                 loc.y -= font.line_spacing;
@@ -101,7 +101,7 @@ struct Text {
                         erase_space_counter = true;
                     }
 
-                    if(word_loc > 0 && (word_loc + data.tex_width) * text_size >= limit) {
+                    if(word_loc > 0 && (word_loc + data.tex_width) * size >= limit) {
                         for(Vertex& v : word_vertices) {
                             v.pos += loc;
                             vertices.push_back(v);
@@ -109,12 +109,12 @@ struct Text {
                         last_word_char = last_char;
                         word_vertices.clear();
 
-                        size.x = std::max(size.x, loc.x + word_loc - (font.glyph_map[last_char].stride - font.glyph_map[last_char].tex_width));
+                        dimensions.x = std::max(dimensions.x, loc.x + word_loc - (font.glyph_map[last_char].stride - font.glyph_map[last_char].tex_width));
                         word_loc = 0;
                         loc.x = 0;
                         loc.y -= font.line_spacing;
-                    } else if((loc.x + word_loc + data.tex_width) * text_size >= limit) {
-                        size.x = std::max(size.x, loc.x - space_counter * font.glyph_map[' '].stride - (font.at(last_word_char).stride - font.at(last_word_char).tex_width));
+                    } else if((loc.x + word_loc + data.tex_width) * size >= limit) {
+                        dimensions.x = std::max(dimensions.x, loc.x - space_counter * font.glyph_map[' '].stride - (font.at(last_word_char).stride - font.at(last_word_char).tex_width));
                         loc.x = 0;
                         loc.y -= font.line_spacing;
                     }
@@ -126,14 +126,13 @@ struct Text {
                     word_vertices.push_back({{word_loc + data.tex_width, 0}, {data.tex_coord + data.tex_width, 0}});
                     word_vertices.push_back({{word_loc + data.tex_width, font.line_height}, {data.tex_coord + data.tex_width, font.line_height}});
 
-                    float red = (hue < 128) ? 1.0f : (hue < 256) ? (float(256 - hue) / 128.0f) : (hue < 512) ? 0.0f : (hue < 640) ? (float(hue - 512) / 128.0f) : 1.0f; 
-                    float green = (hue < 128) ? (float(hue) / 128.0f) : (hue < 384) ? 1.0f : (hue < 512) ? (float(512 - hue) / 128.0f) : 0.0f;
-                    float blue = (hue < 256) ? 0.0f : (hue < 384) ? (float(hue - 256) / 128.0f) : (hue < 640) ? 1.0f : (float(768 - hue) / 128.0f);
+                    //float red = (hue < 128) ? 1.0f : (hue < 256) ? (float(256 - hue) / 128.0f) : (hue < 512) ? 0.0f : (hue < 640) ? (float(hue - 512) / 128.0f) : 1.0f; 
+                    //float green = (hue < 128) ? (float(hue) / 128.0f) : (hue < 384) ? 1.0f : (hue < 512) ? (float(512 - hue) / 128.0f) : 0.0f;
+                    //float blue = (hue < 256) ? 0.0f : (hue < 384) ? (float(hue - 256) / 128.0f) : (hue < 640) ? 1.0f : (float(768 - hue) / 128.0f);
 
-                    colors.push_back({red, green, blue, 1.0f});
-                    colors.push_back({red, green, blue, 1.0f});
+                    colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
 
-                    hue = (hue + 20) % 768;
+                    //hue = (hue + 20) % 768;
 
                     word_loc += data.stride;
 
@@ -163,15 +162,14 @@ struct Text {
         loc.x += word_loc;
 
         for(Vertex& v : vertices) {
-            v.pos *= text_size;
+            v.pos *= size;
         }
 
-        size = {std::max(size.x, loc.x - (font.at(last_char).stride - font.at(last_char).tex_width)), -loc.y + font.line_height};
+        dimensions = {std::max(dimensions.x, loc.x - (font.at(last_char).stride - font.at(last_char).tex_width)), -loc.y + font.line_height};
+        dimensions *= size;
         
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, color_buffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, colors.size() * sizeof(glm::vec4), colors.data(), GL_DYNAMIC_DRAW);
+        color_buffer.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
 
-        text_buffer.bind();
         text_buffer.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         text_buffer.set_attrib(0, 2, 4 * sizeof(float), 0);
         text_buffer.set_attrib(1, 2, 4 * sizeof(float), 2 * sizeof(float));
@@ -181,7 +179,43 @@ struct Text {
 
     void bind_buffers() {
         text_buffer.bind();
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, color_buffer);
+        color_buffer.bind(0);
+    }
+};
+
+struct Button {
+    glm::ivec2 dimensions;
+    glm::ivec2 position;
+
+    Buffer vbuffer;
+    Storage_buffer sbuffer;
+
+    void init_buffers() {
+        vbuffer.init();
+        sbuffer.init();
+    }
+
+    void load_buffers(glm::ivec2 size) {
+        std::vector<glm::ivec2> lim_vec;
+        std::vector<glm::vec2> vert_vec;
+
+        vert_vec.push_back({0, 0});
+        vert_vec.push_back({0, size.y});
+        vert_vec.push_back(size);
+        vert_vec.push_back({0, 0});
+        vert_vec.push_back(size);
+        vert_vec.push_back({size.x, 0});
+        lim_vec.push_back(size);
+
+        sbuffer.set_data(lim_vec.data(), lim_vec.size() * sizeof(glm::ivec2));
+
+        vbuffer.set_data(vert_vec.data(), vert_vec.size(), sizeof(glm::vec2));
+        vbuffer.set_attrib(0, 2, sizeof(float) * 2, 0);
+    }
+
+    void bind_buffers() {
+        vbuffer.bind();
+        sbuffer.bind(0);
     }
 };
 
@@ -192,7 +226,49 @@ struct Core {
 
     Font_data font;
 
+    int text_size = 2;
+
     Text string;
+
+    std::vector<Text> texts = std::vector<Text>(2);
+    std::vector<Button> buttons = std::vector<Button>(2);
+
+    void init_ui_buffers() {
+        for(Text& t : texts) {
+            t.size = text_size;
+            t.init_buffers();
+        }
+        for(Button& b : buttons) {
+            b.init_buffers();
+        }
+        string.init_buffers();
+    }
+
+    void load_ui_buffers() {
+        texts[0].text = "New File";
+        texts[0].position = glm::ivec2{4 * text_size, screen_size.y - (font.line_height + 4) * text_size};
+        texts[1].text = "Open File";
+        texts[1].position = texts[0].position;
+        for(Text& t : texts) {
+            t.init_buffers();
+            t.load_buffers(font);
+        }
+        texts[1].position += glm::ivec2{texts[0].dimensions.x + 6 * text_size, 0};
+
+        for(int i = 0; i < 2; i++) {
+            buttons[i].init_buffers();
+            buttons[i].load_buffers(texts[i].dimensions + glm::ivec2{4, 4} * text_size);
+            buttons[i].position = texts[i].position - glm::ivec2{2, 2} * text_size;
+        }
+    }
+
+    void resize() {
+        texts[0].position.y = screen_size.y - (font.line_height + 4) * text_size;
+        texts[1].position.y = texts[0].position.y;
+
+        buttons[0].position.y = texts[0].position.y - 2 * text_size;
+        buttons[1].position.y = texts[1].position.y - 2 * text_size;
+    }
 };
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -203,6 +279,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, core.screen_size.x, core.screen_size.y);
     
     core.string.load_buffers(core.font, core.screen_size.x - 12);
+
+    core.resize();
 }
 
 void char_callback(GLFWwindow* window, unsigned int codepoint) {
@@ -323,8 +401,10 @@ int main() {
     // button generation
 
     Shader text_shader;
+    Shader button_shader;
 
     text_shader.compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
+    button_shader.compile(get_text_from_file("res\\shaders\\button.vs").data(), get_text_from_file("res\\shaders\\button.fs").data());
 
 
     stbi_set_flip_vertically_on_load(true);
@@ -334,15 +414,8 @@ int main() {
 
     core.string.init_buffers();
 
-    std::vector<Text> texts(2);
-    texts[0].text = "Open File";
-    texts[0].position = {400, 500};
-    texts[1].text = "New File";
-    texts[1].position = {600, 300};
-    for(Text& t : texts) {
-        t.init_buffers();
-        t.load_buffers(core.font);
-    }
+    core.init_ui_buffers();
+    core.load_ui_buffers();
 
     while(core.game_running) {
         glfwPollEvents();
@@ -361,14 +434,26 @@ int main() {
         glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
         glDrawArrays(GL_TRIANGLES, 0, core.string.text_buffer.vertices);
 
-        for(Text& t : texts) {
-            text_shader.use();
+        for(Text& t : core.texts) {
             t.bind_buffers();
 
-            transform_matrix = glm::translate(identity_matrix, t.position);
+            transform_matrix = glm::translate(identity_matrix, (glm::vec2)t.position);
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
             glDrawArrays(GL_TRIANGLES, 0, t.text_buffer.vertices);
+        }
+
+        button_shader.use();
+        
+        for(Button& b : core.buttons) {
+            b.bind_buffers();
+
+            transform_matrix = glm::translate(identity_matrix, (glm::vec2)b.position);
+            glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
+            glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
+            glUniform3f(2, 0.0f, 1.0f, 0.0f);
+            glUniform1i(3, core.text_size);
+            glDrawArrays(GL_TRIANGLES, 0, b.vbuffer.vertices);
         }
         
         glBindVertexArray(0);

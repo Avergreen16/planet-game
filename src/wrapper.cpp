@@ -67,6 +67,7 @@ struct Buffer {
     }
 
     void set_attrib(int id, int values, int stride_bytes, int offset_bytes, GLuint type = GL_FLOAT) {
+        glBindVertexArray(vertex_array);
         glVertexAttribPointer(id, values, type, GL_FALSE, stride_bytes, (void*)offset_bytes);
         glEnableVertexAttribArray(id);
     }
@@ -79,9 +80,28 @@ struct Buffer {
         if(initialized == true) {
             glDeleteBuffers(1, &vertex_buffer);
             glDeleteBuffers(1, &vertex_array);
-
-            //std::cout << "Buffer deleted\n";
         }
+    }
+};
+
+struct Storage_buffer {
+    GLuint id;
+
+    void init() {
+        glGenBuffers(1, &id);
+    }
+
+    void set_data(void* pointer, int size_bytes) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, id);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, size_bytes, pointer, GL_DYNAMIC_DRAW);
+    }
+
+    void bind(int index) {
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, id);
+    }
+
+    ~Storage_buffer() {
+        glDeleteBuffers(1, &id);
     }
 };
 
@@ -138,6 +158,10 @@ struct Shader {
 
     void use() {
         glUseProgram(id);
+    }
+
+    ~Shader() {
+        glDeleteProgram(id);
     }
 };
 

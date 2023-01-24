@@ -9,7 +9,8 @@ in vec2 tex_coord;
 out vec4 frag_color;
 
 void main() {
-    float alpha = texelFetch(text_texture, ivec2(tex_coord), 0).a;
+    frag_color = vec4(1.0, 1.0, 1.0, 1.0);
+    /*float alpha = texelFetch(text_texture, ivec2(tex_coord), 0).a;
     if(alpha != 0.0) frag_color = colors[gl_PrimitiveID / 2];
-    else discard;
+    else discard;*/
 }

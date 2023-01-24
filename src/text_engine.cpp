@@ -22,6 +22,19 @@ std::string get_text_from_file(char* path) {
     file.close();
 }
 
+struct AABB {
+    glm::ivec2 size;
+    glm::ivec2 position;
+
+    bool contains(glm::ivec2 point) {
+        return point.x >= position.x && point.x <= position.x + size.x && point.y >= position.y && point.y <= position.y + size.y;
+    }
+
+    bool contains(AABB box) {
+        return box.position.x + box.size.x >= position.x && box.position.x <= position.x + size.x && box.position.y + box.size.y >= position.y && box.position.y <= position.y + size.y;
+    }
+};
+
 struct Vertex {
     glm::vec2 pos;
     glm::vec2 tex_coords;
@@ -47,13 +60,13 @@ struct Font_data {
 };
 
 struct Text {
-    glm::ivec2 dimensions = {0, 0};
+    AABB bounding_box;
     Buffer text_buffer;
     Storage_buffer color_buffer;
     std::string text = "";
     int size = 2;
 
-    glm::ivec2 position = {0, 0};
+    glm::ivec2 starting_position = {0, 0};
 
     void init_buffers() {
         color_buffer.init();
@@ -61,7 +74,7 @@ struct Text {
     }
 
     void load_buffers(Font_data& font, int limit = 0x7FFFFFFF) {
-        dimensions = {0, 0};
+        bounding_box.size = {0, 0};
 
         glm::ivec2 loc = {0, 0};
         int word_loc = 0;
@@ -89,7 +102,7 @@ struct Text {
                 last_word_char = last_char;
                 word_vertices.clear();
                 
-                dimensions.x = std::max(dimensions.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride - (font.at(last_char).stride - font.at(last_char).tex_width));
+                bounding_box.size.x = std::max(bounding_box.size.x, loc.x + word_loc - space_counter * !erase_space_counter * font.glyph_map[' '].stride - (font.at(last_char).stride - font.at(last_char).tex_width));
                 word_loc = 0;
                 loc.x = 0;
                 loc.y -= font.line_spacing;
@@ -109,12 +122,12 @@ struct Text {
                         last_word_char = last_char;
                         word_vertices.clear();
 
-                        dimensions.x = std::max(dimensions.x, loc.x + word_loc - (font.glyph_map[last_char].stride - font.glyph_map[last_char].tex_width));
+                        bounding_box.size.x = std::max(bounding_box.size.x, loc.x + word_loc - (font.glyph_map[last_char].stride - font.glyph_map[last_char].tex_width));
                         word_loc = 0;
                         loc.x = 0;
                         loc.y -= font.line_spacing;
                     } else if((loc.x + word_loc + data.tex_width) * size >= limit) {
-                        dimensions.x = std::max(dimensions.x, loc.x - space_counter * font.glyph_map[' '].stride - (font.at(last_word_char).stride - font.at(last_word_char).tex_width));
+                        bounding_box.size.x = std::max(bounding_box.size.x, loc.x - space_counter * font.glyph_map[' '].stride - (font.at(last_word_char).stride - font.at(last_word_char).tex_width));
                         loc.x = 0;
                         loc.y -= font.line_spacing;
                     }
@@ -165,8 +178,10 @@ struct Text {
             v.pos *= size;
         }
 
-        dimensions = {std::max(dimensions.x, loc.x - (font.at(last_char).stride - font.at(last_char).tex_width)), -loc.y + font.line_height};
-        dimensions *= size;
+        bounding_box.size = {std::max(bounding_box.size.x, loc.x - (font.at(last_char).stride - font.at(last_char).tex_width)), -loc.y + font.line_height};
+        bounding_box.size *= size;
+
+        bounding_box.position = {starting_position.x, starting_position.y - loc.y};
         
         color_buffer.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
 
@@ -184,8 +199,7 @@ struct Text {
 };
 
 struct Button {
-    glm::ivec2 dimensions;
-    glm::ivec2 position;
+    AABB bounding_box;
 
     Buffer vbuffer;
     Storage_buffer sbuffer;
@@ -196,6 +210,7 @@ struct Button {
     }
 
     void load_buffers(glm::ivec2 size) {
+        bounding_box.size = size;
         std::vector<glm::ivec2> lim_vec;
         std::vector<glm::vec2> vert_vec;
 
@@ -221,6 +236,8 @@ struct Button {
 
 struct Core {
     glm::ivec2 screen_size = {800, 600};
+    glm::ivec2 viewport_size = {800, 600};
+    glm::ivec2 mouse_pos = {0, 0};
     bool game_running = true;
     bool right_shift_pressed = false;
 
@@ -246,37 +263,39 @@ struct Core {
 
     void load_ui_buffers() {
         texts[0].text = "New File";
-        texts[0].position = glm::ivec2{4 * text_size, screen_size.y - (font.line_height + 4) * text_size};
+        texts[0].starting_position = glm::ivec2{4 * text_size, screen_size.y - (font.line_height + 4) * text_size};
         texts[1].text = "Open File";
-        texts[1].position = texts[0].position;
+        texts[1].starting_position = texts[0].starting_position;
         for(Text& t : texts) {
             t.init_buffers();
             t.load_buffers(font);
         }
-        texts[1].position += glm::ivec2{texts[0].dimensions.x + 6 * text_size, 0};
+        texts[1].starting_position += glm::ivec2{texts[0].bounding_box.size.x + 6 * text_size, 0};
 
         for(int i = 0; i < 2; i++) {
             buttons[i].init_buffers();
-            buttons[i].load_buffers(texts[i].dimensions + glm::ivec2{4, 4} * text_size);
-            buttons[i].position = texts[i].position - glm::ivec2{2, 2} * text_size;
+            buttons[i].load_buffers(texts[i].bounding_box.size + glm::ivec2{4, 4} * text_size);
+            buttons[i].bounding_box.position = texts[i].starting_position - glm::ivec2{2, 2} * text_size;
         }
     }
 
     void resize() {
-        texts[0].position.y = screen_size.y - (font.line_height + 4) * text_size;
-        texts[1].position.y = texts[0].position.y;
+        texts[0].starting_position.y = screen_size.y - (font.line_height + 4) * text_size;
+        texts[1].starting_position.y = texts[0].starting_position.y;
 
-        buttons[0].position.y = texts[0].position.y - 2 * text_size;
-        buttons[1].position.y = texts[1].position.y - 2 * text_size;
+        buttons[0].bounding_box.position.y = texts[0].starting_position.y - 2 * text_size;
+        buttons[1].bounding_box.position.y = texts[1].starting_position.y - 2 * text_size;
     }
 };
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
-    core.screen_size.x = width + 1 * (width & 1);
-    core.screen_size.y = height + 1 * (height & 1);
+    core.screen_size.x = width;
+    core.screen_size.y = height;
+    core.viewport_size.x = width + 1 * (width & 1);
+    core.viewport_size.y = height + 1 * (height & 1);
 
-    glViewport(0, 0, core.screen_size.x, core.screen_size.y);
+    glViewport(0, 0, core.viewport_size.x, core.viewport_size.y);
     
     core.string.load_buffers(core.font, core.screen_size.x - 12);
 
@@ -317,6 +336,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     }
 }
 
+void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
+    Core& core = *(Core*)glfwGetWindowUserPointer(window);
+    core.mouse_pos = {xpos, core.screen_size.y - ceil(ypos) - 1};
+    std::cout << core.mouse_pos.x << "\n";
+}
+
 int main() {
     Core core;
 
@@ -351,6 +376,7 @@ int main() {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCharCallback(window, char_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
 
     // loading data
 
@@ -423,10 +449,10 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glm::mat3 view_matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(core.screen_size / 2)));
-        view_matrix = glm::translate(view_matrix, glm::vec2(-core.screen_size.x / 2, -core.screen_size.y / 2));
+        glm::mat3 view_matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(core.viewport_size / 2)));
+        view_matrix = glm::translate(view_matrix, glm::vec2(-core.viewport_size.x / 2, -core.viewport_size.y / 2));
 
-        glm::mat3 transform_matrix = glm::translate(identity_matrix, glm::vec2(6, core.screen_size.y / 2));
+        glm::mat3 transform_matrix = glm::translate(identity_matrix, glm::vec2(6, core.viewport_size.y / 2));
 
         text_shader.use();
         core.string.bind_buffers();
@@ -437,7 +463,7 @@ int main() {
         for(Text& t : core.texts) {
             t.bind_buffers();
 
-            transform_matrix = glm::translate(identity_matrix, (glm::vec2)t.position);
+            transform_matrix = glm::translate(identity_matrix, (glm::vec2)t.starting_position);
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
             glDrawArrays(GL_TRIANGLES, 0, t.text_buffer.vertices);
@@ -448,10 +474,14 @@ int main() {
         for(Button& b : core.buttons) {
             b.bind_buffers();
 
-            transform_matrix = glm::translate(identity_matrix, (glm::vec2)b.position);
+            transform_matrix = glm::translate(identity_matrix, (glm::vec2)b.bounding_box.position);
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
-            glUniform3f(2, 0.0f, 1.0f, 0.0f);
+            if(b.bounding_box.contains(core.mouse_pos)) {
+                glUniform3f(2, 1.0f, 1.0f, 1.0f);
+            } else {
+                glUniform3f(2, 0.0f, 1.0f, 0.0f);
+            }
             glUniform1i(3, core.text_size);
             glDrawArrays(GL_TRIANGLES, 0, b.vbuffer.vertices);
         }

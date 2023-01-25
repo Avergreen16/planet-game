@@ -68,11 +68,36 @@ struct Text_row {
         color_buf.init();
     }
 
-    void load_buffers(Font_data& font, int size) {
+    void load_buffers(Font_data& font, int size, uint32_t line_num) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
+        /*vertices.push_back({{0, 0}, {0, 0}});
+        vertices.push_back({{16, 0}, {0, 0}});
+        vertices.push_back({{0, 16}, {0, 0}});
+        vertices.push_back({{0, 16}, {0, 0}});
+        vertices.push_back({{16, 0}, {0, 0}});
+        vertices.push_back({{16, 16}, {0, 0}});*/
+
         int pos = 0;
+        for(int i = 7; i >= 0; i--) {
+            uint8_t n = (line_num >> (i * 4)) & 0xF;
+            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : 0x76 + n];
+
+            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
+            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
+            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
+            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
+            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
+            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
+
+            pos += (g.tex_width + 1) * size;
+            
+            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+        }
+
+        pos += 13 * size;
+
         for(uint8_t byte : bytes) {
             uint8_t a = byte >> 4;
             uint8_t b = byte & 0xF;
@@ -96,27 +121,46 @@ struct Text_row {
             vertices.push_back({{pos + gb.tex_width * size, font.line_height * size}, {gb.tex_coord + gb.tex_width, font.line_height}});
 
             pos += (gb.tex_width + 5) * size;
+            break;
         }
 
-        vertex_buf.set_data(&vertices, vertices.size(), sizeof(Vertex));
+        vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
-        vertex_buf.set_attrib(0, 2, sizeof(float) * 4, sizeof(float) * 2);
+        vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
-        color_buf.set_data(&colors, colors.size() * sizeof(glm::vec4));
+        color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 
-    void load_buffers(Font_data& font, int size, std::vector<uint8_t>&& new_bytes) {
+    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>&& new_bytes) {
         bytes = new_bytes;
 
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
         int pos = 0;
+        for(int i = 7; i >= 0; i--) {
+            uint8_t n = (line_num >> (i * 4)) & 0xF;
+            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : 0x76 + n];
+
+            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
+            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
+            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
+            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
+            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
+            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
+
+            pos += (g.tex_width + 1) * size;
+            
+            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+        }
+
+        pos += 13 * size;
+
         for(uint8_t byte : bytes) {
             uint8_t a = byte >> 4;
             uint8_t b = byte & 0xF;
-            Glyph_data ga = font.glyph_map[(a < 0xA) ? 0x30 + a : 0x76 + a];
-            Glyph_data gb = font.glyph_map[(b < 0xA) ? 0x30 + b : 0x76 + b];
+            Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : 0x76 + a];
+            Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : 0x76 + b];
 
             vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
             vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
@@ -140,11 +184,11 @@ struct Text_row {
             colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
         }
 
-        vertex_buf.set_data(&vertices, vertices.size(), sizeof(Vertex));
+        vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
-        color_buf.set_data(&colors, colors.size() * sizeof(glm::vec4));
+        color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 };
 
@@ -213,11 +257,11 @@ struct Core {
             byte_rows.insert({i, Text_row()});
             byte_rows[i].init_buffers();
 
-            if(pos + 8 < bytes.size()) {
-                byte_rows[i].load_buffers(font, text_size, std::vector<uint8_t>(bytes.begin() + pos, bytes.begin() + pos + 8));
-                pos += 8;
+            if(pos + 16 < bytes.size()) {
+                byte_rows[i].load_buffers(font, text_size, pos, std::vector<uint8_t>(bytes.begin() + pos, bytes.begin() + pos + 16));
+                pos += 16;
             } else {
-                byte_rows[i].load_buffers(font, text_size, std::vector<uint8_t>(bytes.begin() + pos, bytes.end()));
+                byte_rows[i].load_buffers(font, text_size, pos, std::vector<uint8_t>(bytes.begin() + pos, bytes.end()));
                 break;
             }
         }
@@ -255,28 +299,29 @@ void Core::game_loop() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     glm::mat3 view_matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(viewport_size / 2)));
-    view_matrix = glm::translate(view_matrix, glm::vec2(-viewport_size.x / 2, -viewport_size.y / 2));
+    view_matrix = glm::translate(view_matrix, glm::vec2(-viewport_size / 2));
 
-    glm::mat3 transform_matrix = glm::translate(identity_matrix, glm::vec2(6, screen_size.y - 10 * text_size));
+    glm::mat3 transform_matrix = glm::translate(identity_matrix, glm::vec2(6, screen_size.y - 12 * text_size));
 
     shaders[0].use();
     textures[0].bind(0);
-    //for(auto& [i, t] : byte_rows) {
-    Text_row& t = byte_rows[0];
+    for(auto& [i, t] : byte_rows) {
         t.vertex_buf.bind();
         t.color_buf.bind(0);
 
         glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
-        glUniformMatrix3fv(1, 1, false, &identity_matrix[0][0]);
+        glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
         glDrawArrays(GL_TRIANGLES, 0, t.vertex_buf.vertices);
 
-        //transform_matrix = glm::translate(transform_matrix, glm::vec2(0, -14 * text_size));
-    //}
+        transform_matrix = glm::translate(transform_matrix, glm::vec2(0, -14 * text_size));
+    }
 
     glfwSwapBuffers(window);
 }
 
 int main() {
+    stbi_set_flip_vertically_on_load(true);
+
     Core core;
 
     // init glfw and set version
@@ -319,12 +364,16 @@ int main() {
     core.textures[0].load("res\\text.png");
 
     std::vector<uint8_t> bytes;
-    for(int i = 0; i < 45; i++) {
+    for(int i = 0; i < 2048; i++) {
         bytes.push_back(rand() % 256);
     }
 
     core.load_font();
     core.load_byte_rows(bytes);
+    /*Text_row row;
+    row.bytes = bytes;
+    row.init_buffers();
+    row.load_buffers(core.font, 2);*/
 
     while(core.game_running) {
         glfwPollEvents();

@@ -76,18 +76,25 @@ struct Buffer {
         glBindVertexArray(vertex_array);
     }
 
+    void delete_buffers() {
+        glDeleteBuffers(1, &vertex_buffer);
+        glDeleteVertexArrays(1, &vertex_array);
+        initialized = false;
+    }
+
     ~Buffer() {
         if(initialized == true) {
-            glDeleteBuffers(1, &vertex_buffer);
-            glDeleteBuffers(1, &vertex_array);
+            delete_buffers();
         }
     }
 };
 
 struct Storage_buffer {
     GLuint id;
+    bool initialized = false;
 
     void init() {
+        initialized = true;
         glGenBuffers(1, &id);
     }
 
@@ -100,8 +107,14 @@ struct Storage_buffer {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, id);
     }
 
-    ~Storage_buffer() {
+    void delete_buffer() {
         glDeleteBuffers(1, &id);
+    }
+
+    ~Storage_buffer() {
+        if(initialized) {
+            delete_buffer();
+        }
     }
 };
 

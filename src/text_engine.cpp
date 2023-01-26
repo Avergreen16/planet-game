@@ -339,7 +339,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
     core.mouse_pos = {xpos, core.screen_size.y - ceil(ypos) - 1};
-    std::cout << core.mouse_pos.x << "\n";
 }
 
 int main() {

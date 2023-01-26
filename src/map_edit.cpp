@@ -1433,7 +1433,7 @@ void Core::game_loop() {
 
                 glUniformMatrix3fv(0, 1, false, &identity_matrix[0][0]);
                 glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-                glUniform1f(2, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+                glUniform4f(2, 0.25f, 1.0f, 1.0f, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                 glDrawArrays(GL_TRIANGLES, 0, 6);
             }
@@ -1445,7 +1445,7 @@ void Core::game_loop() {
                 shaders[4].use();
                 glUniformMatrix3fv(0, 1, false, &pos_matrix[0][0]);
                 glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-                glUniform1f(2, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+                glUniform4f(2, 0.25f, 1.0f, 1.0f, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                 glDrawArrays(GL_TRIANGLES, 0, select_buffer.vertices);
             }
@@ -1474,7 +1474,7 @@ void Core::game_loop() {
                 shaders[4].use();
                 glUniformMatrix3fv(0, 1, false, &paste_matrix[0][0]);
                 glUniformMatrix3fv(1, 1, false, &cam_matrix[0][0]);
-                glUniform1f(2, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
+                glUniform4f(2, 0.25f, 1.0f, 1.0f, cos(double((last_time - start_time) / 1000000) * (0.003 * M_PI)) * 0.0625 + 0.25);
 
                 glDrawArrays(GL_TRIANGLES, 0, select_buffer.vertices);
             }

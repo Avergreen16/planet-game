@@ -72,14 +72,14 @@ struct Text_row {
         color_buf.delete_buffer();
     }
 
-    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes) {
+    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
         int pos = 0;
         for(int i = 7; i >= 0; i--) {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : 0x76 + n];
+            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
             vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
@@ -101,8 +101,8 @@ struct Text_row {
             uint8_t byte = bytes[i];
             uint8_t a = byte >> 4;
             uint8_t b = byte & 0xF;
-            Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : 0x76 + a];
-            Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : 0x76 + b];
+            Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+            Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
             vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
             vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
@@ -148,14 +148,14 @@ struct Text_row {
         color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 
-    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, int missing_index, int show) {
+    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten, int missing_index, int show) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
         int pos = 0;
         for(int i = 7; i >= 0; i--) {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : 0x76 + n];
+            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
             vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
@@ -179,7 +179,7 @@ struct Text_row {
             if(i - line_num == missing_index) {
                 if(show == 1) {
                     uint8_t a = bytes[i] >> 4;
-                    Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : 0x76 + a];
+                    Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
                     vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
                     vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
@@ -196,8 +196,8 @@ struct Text_row {
 
                 uint8_t a = byte >> 4;
                 uint8_t b = byte & 0xF;
-                Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : 0x76 + a];
-                Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : 0x76 + b];
+                Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+                Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
                 vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
                 vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
@@ -281,6 +281,8 @@ struct Core {
         {GLFW_MOUSE_BUTTON_LEFT, false}
     };
 
+    uint8_t ten = 0x80;
+
     bool game_running = true;
     GLFWwindow* window;
     glm::ivec2 screen_size = {800, 600};
@@ -292,7 +294,7 @@ struct Core {
     std::vector<Buffer> buffers;
 
     Font_data font;
-    int text_size = 1;
+    int text_size = 2;
     
     Scrollbar scrollbar = Scrollbar(1.0);
 
@@ -389,7 +391,7 @@ struct Core {
         
         int pos = 0;
         for(int n = 0; n < 0x10; n++) {
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : 0x76 + n];
+            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             vertex_vec.push_back({{pos, 0}, {g.tex_coord, 0}});
             vertex_vec.push_back({{pos + g.tex_width * text_size, 0}, {g.tex_coord + g.tex_width, 0}});
@@ -414,15 +416,15 @@ struct Core {
     }
 
     void update_dimensions() {
+        top_left_num_loc = {20 + 57 * text_size, screen_size.y - 31 * text_size - 56};
         rows_total = bytes.size() / 16 + 1;
         rows_shown = top_left_num_loc.y / (15 * text_size) + 1;
         scrollbar.max = std::max(rows_total - rows_shown, 0);
         end_loc = std::min(start_loc + rows_shown, (int)rows_total);
-        top_left_num_loc = {20 + 57 * text_size, screen_size.y - 31 * text_size};
 
-        scrollbar.length = screen_size.y;
+        scrollbar.length = screen_size.y - 56;
         int bar_size = std::max(double(rows_shown) / rows_total * scrollbar.length, 20.0);
-        scrollbar.bar = {{10, bar_size}, {0, screen_size.y - (1.0 - scrollbar.position) * (scrollbar.length - bar_size) - bar_size}};
+        scrollbar.bar = {{10, bar_size}, {0, scrollbar.length - (1.0 - scrollbar.position) * (scrollbar.length - bar_size) - bar_size}};
     }
 
     void game_loop();
@@ -456,11 +458,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - '0') << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
             } else if(core.input_status == 1) {
                 byte |= codepoint - '0';
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
 
                 ++core.selected_num.x;
@@ -489,11 +491,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - 'a' + 0xA) << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
             } else if(core.input_status == 1) {
                 byte |= codepoint - 'a' + 0xA;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
                 
                 ++core.selected_num.x;
@@ -522,12 +524,12 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - 'A' + 0xA) << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
 
             } else if(core.input_status == 1) {
                 byte |= codepoint - 'A' + 0xA;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
 
                 ++core.selected_num.x;
@@ -567,13 +569,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     --core.selected_num.x;
                 }
 
-                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+
+                if(core.start_loc > core.selected_num.y) {
+                    core.start_loc = core.selected_num.y;
+                    core.scrollbar.update_pos(core.start_loc, true);
+                } else if(core.end_loc <= core.selected_num.y) {
+                    core.start_loc = core.selected_num.y - core.rows_shown + 1;
+                    core.scrollbar.update_pos(core.start_loc, true);
+                }
             } else if(core.selected_num.y != -1) {
                 Text_row& row = core.byte_rows[core.selected_num.y];
                 int loc = core.selected_num.y * 16 + core.selected_num.x;
                 if(core.input_status == 1 || core.input_status == -1) {
                     core.bytes[loc] = 0;
-                    row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.selected_num.x, 0);
+                    row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 0);
                     core.input_status = 0;
                 } else if(core.input_status == 0) {
                     core.bytes.erase(core.bytes.begin() + loc);
@@ -582,7 +592,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             if(i >= core.end_loc) {
                                 core.byte_rows.erase(i);
                             } else {
-                                t.load_buffers(core.font, core.text_size, i * 0x10, core.bytes);
+                                t.load_buffers(core.font, core.text_size, i * 0x10, core.bytes, core.ten);
                             }
                         }
                     }
@@ -614,7 +624,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -632,7 +642,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -654,7 +664,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                     std::cout << "check ";
                 }
@@ -681,7 +691,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -729,10 +739,10 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
         core.hovered_num = hovered_num;
     }
 
-    if(core.scrollbar.clicked_on && core.mouse_pos.y < core.screen_size.y && core.mouse_pos.y >= 0) {
+    if(core.scrollbar.clicked_on && core.mouse_pos.y < core.scrollbar.length && core.mouse_pos.y >= 0) {
         if(core.mouse_pos.y == 0) {
             core.scrollbar.position = 0.0;
-        } else if(core.mouse_pos.y == core.screen_size.y) {
+        } else if(core.mouse_pos.y == core.scrollbar.length) {
             core.scrollbar.position = 1.0;
         } else {
             int y_dif = core.mouse_pos.y - prev_pos.y;
@@ -760,10 +770,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     if(button == GLFW_MOUSE_BUTTON_LEFT) {
         if(action == GLFW_PRESS) {
+            if(core.rows_total > core.rows_shown && core.scrollbar.bar.contains(core.mouse_pos)) {
+                core.scrollbar.clicked_on = true;
+            }
+
             if(core.hovered_num.y >= 0 && core.hovered_num.y <= core.bytes.size() / 16 && core.hovered_num.x >= 0 && core.hovered_num.x < 16) {
                 if(core.hovered_num.x + core.hovered_num.y * 16 <= core.bytes.size()) {
                     if(core.input_status != -1) {
-                        core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+                        core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     }
 
                     if(core.selected_num != core.hovered_num) {
@@ -774,14 +788,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
                     core.input_status = -1;
                 }
-            } else if(core.selected_num.y != -1) {
-                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+            } else if(core.selected_num.y != -1 && !core.scrollbar.clicked_on) {
+                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.selected_num.y = -1;
                 core.input_status = -1;
-            }
-
-            if(core.rows_total > core.rows_shown && core.scrollbar.bar.contains(core.mouse_pos)) {
-                core.scrollbar.clicked_on = true;
             }
         } else if(action == GLFW_RELEASE) {
             core.scrollbar.clicked_on = false;
@@ -819,12 +829,12 @@ void Core::game_loop() {
     view_matrix = glm::translate(view_matrix, glm::vec2(-viewport_size / 2));
 
     update_dimensions();
-
-    glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 28 * text_size);
+    
+    glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 28 * text_size - 56);
 
     glm::mat3 transform_matrix = glm::translate(identity_matrix, translate_pos);
 
-    glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 13 * text_size));
+    glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 13 * text_size - 56));
 
 
     shaders[0].use();
@@ -841,7 +851,7 @@ void Core::game_loop() {
 
         if(!t.vertex_buf.initialized) {
             t.init_buffers();
-            t.load_buffers(font, text_size, i * 0x10, bytes);
+            t.load_buffers(font, text_size, i * 0x10, bytes, ten);
         }
 
         t.vertex_buf.bind();
@@ -878,7 +888,7 @@ void Core::game_loop() {
         glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
     }
 
-    glm::mat3 scrollbar_matrix = glm::scale(identity_matrix, {10, screen_size.y});
+    glm::mat3 scrollbar_matrix = glm::scale(identity_matrix, {10, scrollbar.length});
 
     glUniformMatrix3fv(0, 1, false, &scrollbar_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
@@ -893,6 +903,14 @@ void Core::game_loop() {
         glUniform4f(2, 0.0f, 1.0f, 0.0f, 0.5f);
         glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
     }
+
+    glm::mat3 line_matrix = glm::translate(identity_matrix, {0, screen_size.y - 52});
+    line_matrix = glm::scale(line_matrix, {screen_size.x, 2});
+    glUniformMatrix3fv(0, 1, false, &line_matrix[0][0]);
+    glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
+    glUniform4f(2, 0.0f, 1.0f, 0.0f, 1.0f);
+    glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
+
 
     glfwSwapBuffers(window);
 }
@@ -937,7 +955,7 @@ int main() {
     glfwSetMouseButtonCallback(core.window, mouse_button_callback);
     glfwSetScrollCallback(core.window, scroll_callback);
 
-    int bytes_total = 0x4000;
+    int bytes_total = 0x1000;
     core.bytes = std::vector<uint8_t>(bytes_total);
     for(int i = 0; i < bytes_total; i++) {
         core.bytes[i] = rand() % 256;

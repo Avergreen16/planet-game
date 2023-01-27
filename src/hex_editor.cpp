@@ -58,6 +58,15 @@ struct AABB {
     }
 };
 
+void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph_data& g, glm::ivec2 pos) {
+    vertices.push_back({{pos.x, pos.y}, {g.tex_coord, 0}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
+    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
+    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y + font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
+}
+
 struct Text_row {
     Buffer vertex_buf;
     Storage_buffer color_buf;
@@ -72,7 +81,7 @@ struct Text_row {
         color_buf.delete_buffer();
     }
 
-    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten) {
+    void load_buffers(Font_data& font, glm::vec4 color, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
@@ -81,16 +90,10 @@ struct Text_row {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
             Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
-            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
-
-            pos += (g.tex_width + 1) * size;
+            insert_char(vertices, font, size, g, {pos, 0});
+            pos += g.stride * size;
             
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            colors.push_back(color);
         }
 
         pos += 12 * size;
@@ -104,41 +107,24 @@ struct Text_row {
             Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
             Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
-            vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
-            vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-            vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-            vertices.push_back({{pos + ga.tex_width * size, font.line_height * size}, {ga.tex_coord + ga.tex_width, font.line_height}});
+            insert_char(vertices, font, size, ga, {pos, 0});
+            pos += ga.stride * size;
 
-            pos += (ga.tex_width + 1) * size;
+            insert_char(vertices, font, size, gb, {pos, 0});
+            pos += (gb.stride + 5) * size;
 
-            vertices.push_back({{pos, 0}, {gb.tex_coord, 0}});
-            vertices.push_back({{pos + gb.tex_width * size, 0}, {gb.tex_coord + gb.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {gb.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {gb.tex_coord, font.line_height}});
-            vertices.push_back({{pos + gb.tex_width * size, 0}, {gb.tex_coord + gb.tex_width, 0}});
-            vertices.push_back({{pos + gb.tex_width * size, font.line_height * size}, {gb.tex_coord + gb.tex_width, font.line_height}});
-
-            pos += (gb.tex_width + 6) * size;
-
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            colors.push_back(color);
+            colors.push_back(color);
         }
 
         if(bytes_num < 16) {
             Glyph_data& g = font.glyph_map['+'];
 
-            pos += ((font.glyph_map['0'].tex_width * 2 + 1) - g.tex_width) / 2 * size;
+            pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
-            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
+            insert_char(vertices, font, size, g, {pos, 0});
 
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            colors.push_back(color);
         }
 
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
@@ -148,7 +134,7 @@ struct Text_row {
         color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 
-    void load_buffers(Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten, int missing_index, int show) {
+    void load_buffers(Font_data& font, glm::vec4 color, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten, int missing_index, int show) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
@@ -157,16 +143,10 @@ struct Text_row {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
             Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
-            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
-
-            pos += (g.tex_width + 1) * size;
+            insert_char(vertices, font, size, g, {pos, 0});
+            pos += g.stride * size;
             
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            colors.push_back(color);
         }
 
         pos += 12 * size;
@@ -181,16 +161,10 @@ struct Text_row {
                     uint8_t a = bytes[i] >> 4;
                     Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
-                    vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
-                    vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-                    vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-                    vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-                    vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-                    vertices.push_back({{pos + ga.tex_width * size, font.line_height * size}, {ga.tex_coord + ga.tex_width, font.line_height}});
-
-                    colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+                    insert_char(vertices, font, size, ga, {pos, 0});
+                    colors.push_back(color);
                 }
-                pos += (font.glyph_map['0'].tex_width * 2 + 7) * size;
+                pos += (font.glyph_map['0'].stride * 2 + 5) * size;
             } else {
                 uint8_t byte = bytes[i];
 
@@ -199,42 +173,24 @@ struct Text_row {
                 Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
                 Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
-                vertices.push_back({{pos, 0}, {ga.tex_coord, 0}});
-                vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-                vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-                vertices.push_back({{pos, font.line_height * size}, {ga.tex_coord, font.line_height}});
-                vertices.push_back({{pos + ga.tex_width * size, 0}, {ga.tex_coord + ga.tex_width, 0}});
-                vertices.push_back({{pos + ga.tex_width * size, font.line_height * size}, {ga.tex_coord + ga.tex_width, font.line_height}});
+                insert_char(vertices, font, size, ga, {pos, 0});
+                pos += ga.stride * size;
 
-                pos += (ga.tex_width + 1) * size;
+                insert_char(vertices, font, size, gb, {pos, 0});
+                pos += (gb.stride + 5) * size;
 
-                vertices.push_back({{pos, 0}, {gb.tex_coord, 0}});
-                vertices.push_back({{pos + gb.tex_width * size, 0}, {gb.tex_coord + gb.tex_width, 0}});
-                vertices.push_back({{pos, font.line_height * size}, {gb.tex_coord, font.line_height}});
-                vertices.push_back({{pos, font.line_height * size}, {gb.tex_coord, font.line_height}});
-                vertices.push_back({{pos + gb.tex_width * size, 0}, {gb.tex_coord + gb.tex_width, 0}});
-                vertices.push_back({{pos + gb.tex_width * size, font.line_height * size}, {gb.tex_coord + gb.tex_width, font.line_height}});
-
-                pos += (gb.tex_width + 6) * size;
-
-                colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
-                colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+                colors.push_back(color);
+                colors.push_back(color);
             }
         }
 
         if(bytes_num < 16 && missing_index != i) {
             Glyph_data& g = font.glyph_map['+'];
 
-            pos += ((font.glyph_map['0'].tex_width * 2 + 1) - g.tex_width) / 2 * size;
+            pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
-            vertices.push_back({{pos, 0}, {g.tex_coord, 0}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos, font.line_height * size}, {g.tex_coord, font.line_height}});
-            vertices.push_back({{pos + g.tex_width * size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertices.push_back({{pos + g.tex_width * size, font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
-
-            colors.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            insert_char(vertices, font, size, g, {pos, 0});
+            colors.push_back(color);
         }
 
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
@@ -292,6 +248,7 @@ struct Core {
     std::vector<Shader> shaders;
     std::vector<Texture> textures;
     std::vector<Buffer> buffers;
+    std::vector<Storage_buffer> storage_buffers;
 
     Font_data font;
     int text_size = 2;
@@ -310,9 +267,9 @@ struct Core {
     glm::ivec2 selected_num = {0, -1};
     int input_status = 2;
 
-    // numbers at the top
-    Buffer num_buffer;
-    Storage_buffer num_color_buffer;
+    glm::vec4 color = {0.0f, 1.0f, 0.0f, 1.0f};
+
+    bool big_endian = false;
 
     void load_font() {
         std::ifstream file;
@@ -363,7 +320,8 @@ struct Core {
     void load_assets() {
         shaders = std::vector<Shader>(2);
         textures = std::vector<Texture>(1);
-        buffers = std::vector<Buffer>(1);
+        buffers = std::vector<Buffer>(3);
+        storage_buffers = std::vector<Storage_buffer>(2);
         
         shaders[0].compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
         shaders[1].compile(get_text_from_file("res\\shaders\\select.vs").data(), get_text_from_file("res\\shaders\\select.fs").data());
@@ -383,6 +341,318 @@ struct Core {
         buffers[0].init();
         buffers[0].set_data(vertex_vec.data(), vertex_vec.size(), sizeof(glm::vec2));
         buffers[0].set_attrib(0, 2, sizeof(float) * 2, 0);
+
+        buffers[2].init();
+        storage_buffers[1].init();
+    }
+
+    void load_info_buffer() {
+        int index = selected_num.y * 16 + selected_num.x;
+
+        std::vector<Vertex> vertex_vec;
+        std::vector<glm::vec4> color_vec;
+
+        glm::ivec2 pos = {0, 0};
+
+        if(!big_endian) {
+            std::string str = "binary: ";
+
+            for(int i = 7; i >= 0; i--) {
+                if((bytes[index] >> i) & 1) str += '1';
+                else str += '0';
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+            
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "uint8: " + std::to_string(bytes[index]);
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "int8: " + std::to_string(int8_t(bytes[index]));
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "uint16: ";
+            if(index + 1 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(uint16_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "int16: ";
+            if(index + 1 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(int16_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "uint32: ";
+            if(index + 3 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(uint32_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "int32: ";
+            if(index + 3 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(int32_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+            
+
+
+            str = "uint64: ";
+            if(index + 7 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(uint64_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "int64: ";
+            if(index + 7 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                str += std::to_string(*(int64_t*)&bytes[index]);
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * 2 * text_size;
+
+
+            
+            str = "float32: ";
+            if(index + 3 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                float f = *(float*)&bytes[index];
+                std::stringstream sstream;
+                sstream << f;
+                str += sstream.str();
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "float64: ";
+            if(index + 7 >= bytes.size()) {
+                str += "[EOF]";
+            } else {
+                double d = *(double*)&bytes[index];
+                std::stringstream sstream;
+                sstream << d;
+                str += sstream.str();
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * 2 * text_size;
+
+
+
+            str = "char: ";
+            if(font.glyph_map.contains(bytes[index])) {
+                if(font.glyph_map[bytes[index]].visible) str += bytes[index];
+                else str += "[invisible]";
+            } else {
+                str += "[?]";
+            }
+
+            for(char c : str) {
+                Glyph_data& g = font.glyph_map[c];
+
+                if(g.visible) {
+                    insert_char(vertex_vec, font, text_size, g, pos);
+                    color_vec.push_back(color);
+                }
+                pos.x += g.stride * text_size;
+            }
+
+            pos.x = 0;
+            pos.y -= (font.line_spacing + 5) * text_size;
+
+
+
+            str = "color: ";
+            if(index + 2 >= bytes.size()) {
+                str += "[EOF]";
+
+                for(char c : str) {
+                    Glyph_data& g = font.glyph_map[c];
+
+                    if(g.visible) {
+                        insert_char(vertex_vec, font, text_size, g, pos);
+                        color_vec.push_back(color);
+                    }
+                    pos.x += g.stride * text_size;
+                }
+            } else {
+                str += 0x86;
+
+                for(char c : str) {
+                    Glyph_data& g = font.glyph_map[c];
+
+                    if(g.visible) {
+                        insert_char(vertex_vec, font, text_size, g, pos);
+                        color_vec.push_back(color);
+                    }
+                    pos.x += g.stride * text_size;
+                }
+
+                color_vec[color_vec.size() - 1] = {float(bytes[index]) / 255, float(bytes[index + 1]) / 255, float(bytes[index + 2]) / 255, 1.0f};
+            }
+        } else {
+
+        }
+
+        buffers[2].set_data(vertex_vec.data(), vertex_vec.size(), sizeof(Vertex));
+        buffers[2].set_attrib(0, 2, sizeof(float) * 4, 0);
+        buffers[2].set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
+
+        storage_buffers[1].set_data(color_vec.data(), color_vec.size() * sizeof(glm::vec4));
     }
 
     void load_byte_rows() {
@@ -393,36 +663,31 @@ struct Core {
         for(int n = 0; n < 0x10; n++) {
             Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
-            vertex_vec.push_back({{pos, 0}, {g.tex_coord, 0}});
-            vertex_vec.push_back({{pos + g.tex_width * text_size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertex_vec.push_back({{pos, font.line_height * text_size}, {g.tex_coord, font.line_height}});
-            vertex_vec.push_back({{pos, font.line_height * text_size}, {g.tex_coord, font.line_height}});
-            vertex_vec.push_back({{pos + g.tex_width * text_size, 0}, {g.tex_coord + g.tex_width, 0}});
-            vertex_vec.push_back({{pos + g.tex_width * text_size, font.line_height * text_size}, {g.tex_coord + g.tex_width, font.line_height}});
+            insert_char(vertex_vec, font, text_size, g, {pos, 0});
 
-            color_vec.push_back({0.0f, 1.0f, 0.0f, 1.0f});
+            color_vec.push_back(color);
 
             pos += 17 * text_size;
         }
 
-        num_buffer.init();
-        num_color_buffer.init();
+        buffers[1].init();
+        storage_buffers[0].init();
 
-        num_buffer.set_data(vertex_vec.data(), vertex_vec.size(), sizeof(Vertex));
-        num_buffer.set_attrib(0, 2, sizeof(float) * 4, 0);
-        num_buffer.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
+        buffers[1].set_data(vertex_vec.data(), vertex_vec.size(), sizeof(Vertex));
+        buffers[1].set_attrib(0, 2, sizeof(float) * 4, 0);
+        buffers[1].set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
-        num_color_buffer.set_data(color_vec.data(), color_vec.size() * sizeof(glm::vec4));
+        storage_buffers[0].set_data(color_vec.data(), color_vec.size() * sizeof(glm::vec4));
     }
 
     void update_dimensions() {
-        top_left_num_loc = {20 + 57 * text_size, screen_size.y - 31 * text_size - 56};
+        top_left_num_loc = {20 + 57 * text_size, screen_size.y - 31 * text_size};
         rows_total = bytes.size() / 16 + 1;
         rows_shown = top_left_num_loc.y / (15 * text_size) + 1;
         scrollbar.max = std::max(rows_total - rows_shown, 0);
         end_loc = std::min(start_loc + rows_shown, (int)rows_total);
 
-        scrollbar.length = screen_size.y - 56;
+        scrollbar.length = screen_size.y;
         int bar_size = std::max(double(rows_shown) / rows_total * scrollbar.length, 20.0);
         scrollbar.bar = {{10, bar_size}, {0, scrollbar.length - (1.0 - scrollbar.position) * (scrollbar.length - bar_size) - bar_size}};
     }
@@ -458,11 +723,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - '0') << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
             } else if(core.input_status == 1) {
                 byte |= codepoint - '0';
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
 
                 ++core.selected_num.x;
@@ -479,6 +744,8 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 core.start_loc = core.selected_num.y - core.rows_shown + 1;
                 core.scrollbar.update_pos(core.start_loc, true);
             }
+
+            core.load_info_buffer();
         } else if(codepoint >= 'a' && codepoint <= 'f') {
             Text_row& row = core.byte_rows[core.selected_num.y];
             if(core.selected_num.y * 16 + core.selected_num.x == core.bytes.size()) {
@@ -491,11 +758,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - 'a' + 0xA) << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
             } else if(core.input_status == 1) {
                 byte |= codepoint - 'a' + 0xA;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
                 
                 ++core.selected_num.x;
@@ -512,6 +779,8 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 core.start_loc = core.selected_num.y - core.rows_shown + 1;
                 core.scrollbar.update_pos(core.start_loc, true);
             }
+
+            core.load_info_buffer();
         } else if(codepoint >= 'A' && codepoint <= 'F') {
             Text_row& row = core.byte_rows[core.selected_num.y];
             if(core.selected_num.y * 16 + core.selected_num.x == core.bytes.size()) {
@@ -524,12 +793,12 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
             uint8_t& byte = core.bytes[core.selected_num.y * 16 + core.selected_num.x];
             if(core.input_status == 0 || core.input_status == -1) {
                 byte = (codepoint - 'A' + 0xA) << 4;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 1);
                 core.input_status = 1;
 
             } else if(core.input_status == 1) {
                 byte |= codepoint - 'A' + 0xA;
-                row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.input_status = 0;
 
                 ++core.selected_num.x;
@@ -546,6 +815,8 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 core.start_loc = core.selected_num.y - core.rows_shown + 1;
                 core.scrollbar.update_pos(core.start_loc, true);
             }
+
+            core.load_info_buffer();
         }
     }
 }
@@ -569,7 +840,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     --core.selected_num.x;
                 }
 
-                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
 
                 if(core.start_loc > core.selected_num.y) {
                     core.start_loc = core.selected_num.y;
@@ -583,7 +854,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 int loc = core.selected_num.y * 16 + core.selected_num.x;
                 if(core.input_status == 1 || core.input_status == -1) {
                     core.bytes[loc] = 0;
-                    row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 0);
+                    row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten, core.selected_num.x, 0);
                     core.input_status = 0;
                 } else if(core.input_status == 0) {
                     core.bytes.erase(core.bytes.begin() + loc);
@@ -592,7 +863,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             if(i >= core.end_loc) {
                                 core.byte_rows.erase(i);
                             } else {
-                                t.load_buffers(core.font, core.text_size, i * 0x10, core.bytes, core.ten);
+                                t.load_buffers(core.font, core.color, core.text_size, i * 0x10, core.bytes, core.ten);
                             }
                         }
                     }
@@ -618,17 +889,25 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.start_loc = core.selected_num.y - core.rows_shown + 1;
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
+
+                core.load_info_buffer();
             }
         }
     } else if(key == GLFW_KEY_UP) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
-                core.selected_num.y = std::max(core.selected_num.y - 1, 0);
+                glm::ivec2 new_select = {core.selected_num.x, std::max(core.selected_num.y - 1, 0)};
+
+                if(new_select != core.selected_num) {
+                    core.selected_num = new_select;
+                    core.load_info_buffer();
+                }
+
                 if(core.start_loc > core.selected_num.y) {
                     core.start_loc = core.selected_num.y;
                     core.scrollbar.update_pos(core.start_loc, true);
@@ -636,19 +915,26 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.start_loc = core.selected_num.y - core.rows_shown + 1;
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
+
+                core.load_info_buffer();
             }
         }
     } else if(key == GLFW_KEY_DOWN) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
-                core.selected_num.y = std::min(core.selected_num.y + 1, core.rows_total - 1);
-                if(core.selected_num.y * 16 + core.selected_num.x > core.bytes.size()) {
-                    core.selected_num.x = core.bytes.size() % 16;
+                glm::ivec2 new_select = {core.selected_num.x, std::min(core.selected_num.y + 1, core.rows_total - 1)};
+                if(new_select.y * 16 + new_select.x > core.bytes.size()) {
+                    new_select.x = core.bytes.size() % 16;
+                }
+
+                if(new_select != core.selected_num) {
+                    core.selected_num = new_select;
+                    if(core.selected_num.y * 16 + core.selected_num.x != core.bytes.size()) core.load_info_buffer();
                 }
 
                 if(core.start_loc > core.selected_num.y) {
@@ -658,24 +944,31 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.start_loc = core.selected_num.y - core.rows_shown + 1;
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
+
+                core.load_info_buffer();
             }
         }
     } else if(key == GLFW_KEY_RIGHT) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                     std::cout << "check ";
                 }
 
-                if(core.selected_num.y != core.rows_total - 1 || core.selected_num.x + 1 <= core.bytes.size() % 16) {
-                    ++core.selected_num.x;
+                glm::ivec2 new_select = core.selected_num;
+                if(new_select.y != core.rows_total - 1 || new_select.x + 1 <= core.bytes.size() % 16) {
+                    ++new_select.x;
+                }
+                if(new_select.x > 15) {
+                    new_select.x = 0;
+                    ++new_select.y;
                 }
 
-                if(core.selected_num.x > 15) {
-                    core.selected_num.x = 0;
-                    ++core.selected_num.y;
+                if(new_select != core.selected_num) {
+                    core.selected_num = new_select;
+                    if(core.selected_num.y * 16 + core.selected_num.x != core.bytes.size()) core.load_info_buffer();
                 }
                 
                 if(core.start_loc > core.selected_num.y) {
@@ -685,24 +978,31 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.start_loc = core.selected_num.y - core.rows_shown + 1;
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
+
+                core.load_info_buffer();
             }
         }
     } else if(key == GLFW_KEY_LEFT) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     core.input_status = -1;
                 }
 
-                --core.selected_num.x;
-                if(core.selected_num.x < 0) {
-                    if(core.selected_num.y == 0) {
-                        core.selected_num.x = 0;
+                glm::ivec2 new_select = core.selected_num - glm::ivec2{1, 0};
+                if(new_select.x < 0) {
+                    if(new_select.y == 0) {
+                        new_select.x = 0;
                     } else {
-                        core.selected_num.x = 15;
-                        --core.selected_num.y;
+                        new_select.x = 15;
+                        --new_select.y;
                     }
+                }
+
+                if(new_select != core.selected_num) {
+                    core.selected_num = new_select;
+                    core.load_info_buffer();
                 }
                 
                 if(core.start_loc > core.selected_num.y) {
@@ -721,7 +1021,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     /* else if(key == GLFW_KEY_ENTER) {
         if(core.selected_num.y != -1) {
             Text_row& row = core.byte_rows[core.selected_num.y];
-            row.load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes);
+            row.load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes);
             core.input_status = 2;
             core.selected_num.y = -1;
         }
@@ -777,11 +1077,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             if(core.hovered_num.y >= 0 && core.hovered_num.y <= core.bytes.size() / 16 && core.hovered_num.x >= 0 && core.hovered_num.x < 16) {
                 if(core.hovered_num.x + core.hovered_num.y * 16 <= core.bytes.size()) {
                     if(core.input_status != -1) {
-                        core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                        core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                     }
 
                     if(core.selected_num != core.hovered_num) {
                         core.selected_num = core.hovered_num;
+                        core.load_info_buffer();
                     } else {
                         core.selected_num.y = -1;
                     }
@@ -789,7 +1090,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                     core.input_status = -1;
                 }
             } else if(core.selected_num.y != -1 && !core.scrollbar.clicked_on) {
-                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
+                core.byte_rows[core.selected_num.y].load_buffers(core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.bytes, core.ten);
                 core.selected_num.y = -1;
                 core.input_status = -1;
             }
@@ -830,28 +1131,28 @@ void Core::game_loop() {
 
     update_dimensions();
     
-    glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 28 * text_size - 56);
+    glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 28 * text_size);
 
     glm::mat3 transform_matrix = glm::translate(identity_matrix, translate_pos);
 
-    glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 13 * text_size - 56));
+    glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 13 * text_size));
 
 
     shaders[0].use();
     textures[0].bind(0);
 
-    num_buffer.bind();
-    num_color_buffer.bind(0);
+    buffers[1].bind();
+    storage_buffers[0].bind(0);
     glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &num_matrix[0][0]);
-    glDrawArrays(GL_TRIANGLES, 0, num_buffer.vertices);
+    glDrawArrays(GL_TRIANGLES, 0, buffers[1].vertices);
 
     for(int i = start_loc; i < end_loc; i++) {
         Text_row& t = byte_rows[i];
 
         if(!t.vertex_buf.initialized) {
             t.init_buffers();
-            t.load_buffers(font, text_size, i * 0x10, bytes, ten);
+            t.load_buffers(font, color, text_size, i * 0x10, bytes, ten);
         }
 
         t.vertex_buf.bind();
@@ -866,6 +1167,16 @@ void Core::game_loop() {
         transform_matrix = glm::translate(identity_matrix, translate_pos);
     }
 
+    if(selected_num.y != -1 && selected_num.y * 16 + selected_num.x != bytes.size()) {
+        buffers[2].bind();
+        storage_buffers[1].bind(0);
+        glm::mat3 info_matrix = glm::translate(identity_matrix, {20 + (font.glyph_map['0'].stride * 40 + 106) * text_size, screen_size.y - 28 * text_size});
+
+        glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
+        glUniformMatrix3fv(1, 1, false, &info_matrix[0][0]);
+        glDrawArrays(GL_TRIANGLES, 0, buffers[2].vertices);
+    }
+
     shaders[1].use();
     buffers[0].bind();
 
@@ -875,7 +1186,7 @@ void Core::game_loop() {
 
         glUniformMatrix3fv(0, 1, false, &select_matrix[0][0]);
         glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
-        glUniform4f(2, 0.0f, 1.0f, 0.0f, 0.25f);
+        glUniform4f(2, color.r, color.g, color.b, 0.25f);
         glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
     }
     if(hovered_num != selected_num && hovered_num.y >= start_loc && hovered_num.y < end_loc && hovered_num.x >= 0 && hovered_num.x < 16 && hovered_num.y * 16 + hovered_num.x <= bytes.size()) {
@@ -884,7 +1195,7 @@ void Core::game_loop() {
 
         glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
         glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
-        glUniform4f(2, 0.0f, 1.0f, 0.0f, 0.125f);
+        glUniform4f(2, color.r, color.g, color.b, 0.125f);
         glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
     }
 
@@ -892,7 +1203,7 @@ void Core::game_loop() {
 
     glUniformMatrix3fv(0, 1, false, &scrollbar_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
-    glUniform4f(2, 0.0f, 1.0f, 0.0f, 0.25f);
+    glUniform4f(2, color.r, color.g, color.b, 0.25f);
     glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
 
     if(rows_total > rows_shown) {
@@ -900,16 +1211,16 @@ void Core::game_loop() {
         scrollbar_matrix = glm::scale(scrollbar_matrix, glm::vec2(scrollbar.bar.size));
         glUniformMatrix3fv(0, 1, false, &scrollbar_matrix[0][0]);
         glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
-        glUniform4f(2, 0.0f, 1.0f, 0.0f, 0.5f);
+        glUniform4f(2, color.r, color.g, color.b, 0.5f);
         glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
     }
 
-    glm::mat3 line_matrix = glm::translate(identity_matrix, {0, screen_size.y - 52});
+    /*glm::mat3 line_matrix = glm::translate(identity_matrix, {0, screen_size.y - 52});
     line_matrix = glm::scale(line_matrix, {screen_size.x, 2});
     glUniformMatrix3fv(0, 1, false, &line_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
-    glUniform4f(2, 0.0f, 1.0f, 0.0f, 1.0f);
-    glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
+    glUniform4f(2, color.r, color.g, color.b, 1.0f);
+    glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);*/
 
 
     glfwSwapBuffers(window);
@@ -930,7 +1241,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // create window
-    core.window = glfwCreateWindow(core.screen_size.x, core.screen_size.y, "This is a test.", NULL, NULL);
+    core.window = glfwCreateWindow(core.screen_size.x, core.screen_size.y, "Ave's Hex Editor", NULL, NULL);
     if(core.window == NULL) {
         std::cout << "ERROR: Window creation failed.\n";
         glfwTerminate();

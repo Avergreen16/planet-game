@@ -1032,7 +1032,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void cursor_pos_callback(GLFWwindow* window, double x_pos, double y_pos) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
     glm::ivec2 new_pos(x_pos, y_pos);
-    if(core.keymap_mouse[GLFW_MOUSE_BUTTON_RIGHT] & 1) {
+    if(core.keymap_mouse[GLFW_MOUSE_BUTTON_MIDDLE] & 1) {
         glm::vec2 difference(new_pos - core.mouse_pos);
         core.camera_pos += glm::vec2(-difference.x, difference.y) / float(core.scale);
     }
@@ -1293,7 +1293,7 @@ void Core::game_loop() {
             }
         }
 
-        if(keymap_mouse[GLFW_MOUSE_BUTTON_MIDDLE] == PRESS_ON) {
+        if(keymap_mouse[GLFW_MOUSE_BUTTON_RIGHT] == PRESS_ON) {
             glm::ivec2 chunk_key = mouse_tile >> 4;
             if(chunks.contains(chunk_key)) {
                 int loc = (mouse_tile.x & 15) + ((mouse_tile.y & 15) << 4);

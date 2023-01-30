@@ -31,10 +31,12 @@ struct Buffer {
     Buffer(Buffer& a) {
         vertex_array = a.vertex_array;
         vertex_buffer = a.vertex_buffer;
+        vertices = a.vertices;
         initialized = true;
 
         a.vertex_array = 0;
         a.vertex_buffer = 0;
+        a.vertices = 0;
         a.initialized = false;
     }
     
@@ -43,10 +45,12 @@ struct Buffer {
     Buffer(Buffer&& a) {
         vertex_array = a.vertex_array;
         vertex_buffer = a.vertex_buffer;
+        vertices = a.vertices;
         initialized = true;
 
         a.vertex_array = 0;
         a.vertex_buffer = 0;
+        a.vertices = 0;
         a.initialized = false;
     };
 
@@ -91,6 +95,7 @@ struct Buffer {
 
 struct Storage_buffer {
     GLuint id;
+    int size;
     bool initialized = false;
 
     void init() {
@@ -101,6 +106,7 @@ struct Storage_buffer {
     void set_data(void* pointer, int size_bytes) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, id);
         glBufferData(GL_SHADER_STORAGE_BUFFER, size_bytes, pointer, GL_DYNAMIC_DRAW);
+        size = size_bytes;
     }
 
     void bind(int index) {

@@ -140,21 +140,17 @@ void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph
 
 struct Text_row {
     Buffer vertex_buf;
-    Storage_buffer color_buf;
 
     void init_buffers() {
         vertex_buf.init();
-        color_buf.init();
     }
 
     void clear_buffers() {
         vertex_buf.delete_buffers();
-        color_buf.delete_buffer();
     }
 
-    void load_buffers(bool text_mode, Font_data& font, glm::vec4 color, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten) {
+    void load_buffers(bool text_mode, Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten) {
         std::vector<Vertex> vertices;
-        std::vector<glm::vec4> colors;
 
         int pos = 0;
         for(int i = 7; i >= 0; i--) {
@@ -163,8 +159,6 @@ struct Text_row {
 
             insert_char(vertices, font, size, g, {pos, 0});
             pos += g.stride * size;
-            
-            colors.push_back(color);
         }
 
         pos += 12 * size;
@@ -180,7 +174,6 @@ struct Text_row {
                 if(g.visible) insert_char(vertices, font, size, g, {pos + (5 - g.tex_width / 2) * size, 0});
 
                 pos += 17 * size;
-                colors.push_back(color);
             }
         } else {
             for(int i = line_num; i < line_num + bytes_num; i++) {
@@ -195,9 +188,6 @@ struct Text_row {
 
                 insert_char(vertices, font, size, gb, {pos, 0});
                 pos += (gb.stride + 5) * size;
-
-                colors.push_back(color);
-                colors.push_back(color);
             }
         }
 
@@ -207,18 +197,14 @@ struct Text_row {
             pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
             insert_char(vertices, font, size, g, {pos, 0});
-
-            colors.push_back(color);
         }
 
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
-
-        color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 
-    void load_buffers(bool text_mode, Font_data& font, glm::vec4 color, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten, int missing_index, int show) {
+    void load_buffers(bool text_mode, Font_data& font, int size, uint32_t line_num, std::vector<uint8_t>& bytes, uint8_t ten, int missing_index, int show) {
         std::vector<Vertex> vertices;
         std::vector<glm::vec4> colors;
 
@@ -229,8 +215,6 @@ struct Text_row {
 
             insert_char(vertices, font, size, g, {pos, 0});
             pos += g.stride * size;
-            
-            colors.push_back(color);
         }
 
         pos += 12 * size;
@@ -248,7 +232,6 @@ struct Text_row {
                         Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
                         insert_char(vertices, font, size, ga, {pos, 0});
-                        colors.push_back(color);
                     }
                     pos += (font.glyph_map['0'].stride * 2 + 5) * size;
                 } else {
@@ -259,7 +242,6 @@ struct Text_row {
                     if(g.visible) insert_char(vertices, font, size, g, {pos + (5 - g.tex_width / 2) * size, 0});
 
                     pos += 17 * size;
-                    colors.push_back(color);
                 }
             }
         } else {
@@ -271,7 +253,6 @@ struct Text_row {
                         Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
                         insert_char(vertices, font, size, ga, {pos, 0});
-                        colors.push_back(color);
                     }
                     pos += (font.glyph_map['0'].stride * 2 + 5) * size;
                 } else {
@@ -287,9 +268,6 @@ struct Text_row {
 
                     insert_char(vertices, font, size, gb, {pos, 0});
                     pos += (gb.stride + 5) * size;
-
-                    colors.push_back(color);
-                    colors.push_back(color);
                 }
             }
         }
@@ -300,28 +278,23 @@ struct Text_row {
             pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
             insert_char(vertices, font, size, g, {pos, 0});
-            colors.push_back(color);
         }
 
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
-
-        color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
     }
 };
 
 struct Text {
     Buffer vertex_buf;
-    Storage_buffer color_buf;
     glm::ivec2 size;
 
     void init_buffers() {
         vertex_buf.init();
-        color_buf.init();
     }
 
-    void load_buffers(Font_data& font, std::string text, glm::vec4 color, int size) {
+    void load_buffers(Font_data& font, std::string text, int size) {
         int pos = 0;
 
         std::vector<Vertex> vertices;
@@ -333,7 +306,6 @@ struct Text {
                 
                 if(g.visible) {
                     insert_char(vertices, font, size, g, {pos, 0});
-                    colors.push_back(color);
                 }
                 pos += g.stride * size;
             }
@@ -342,8 +314,6 @@ struct Text {
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
-
-        color_buf.set_data(colors.data(), colors.size() * sizeof(glm::vec4));
 
         this->size = glm::ivec2{std::max(0, pos - 1 * size), font.line_height * size};
     }
@@ -389,6 +359,9 @@ struct Tab {
     std::string path;
     Text text;
     std::vector<uint8_t> bytes;
+
+    int pos = 0;
+    glm::ivec2 selected = {0, -1};
 };
 
 enum screens {EDITOR, TABS, SETTINGS};
@@ -437,14 +410,15 @@ struct Core {
     glm::vec4 color = {0.0f, 1.0f, 0.0f, 1.0f};
 
     std::vector<Button> buttons;
-    std::vector<int> active_buttons = {0, 1, 2, 3, 4, 5};
+    std::vector<int> active_buttons = {1, 2, 3, 4, 5, 6};
     /*
-    0 -> tabs
-    1 -> new
-    2 -> open
-    3 -> save
-    4 -> save as
-    5 -> settings
+    0 -> editor
+    1 -> tabs
+    2 -> new
+    3 -> open
+    4 -> save
+    5 -> save as
+    6 -> settings
     */
 
     bool big_endian = false;
@@ -499,13 +473,14 @@ struct Core {
     }
 
     void load_assets() {
-        shaders = std::vector<Shader>(2);
+        shaders = std::vector<Shader>(3);
         textures = std::vector<Texture>(1);
         buffers = std::vector<Buffer>(3);
         storage_buffers = std::vector<Storage_buffer>(2);
         
-        shaders[0].compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
+        shaders[0].compile(get_text_from_file("res\\shaders\\text_color.vs").data(), get_text_from_file("res\\shaders\\text_color.fs").data());
         shaders[1].compile(get_text_from_file("res\\shaders\\select.vs").data(), get_text_from_file("res\\shaders\\select.fs").data());
+        shaders[2].compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
 
         textures[0].load("res\\text.png");
         load_font();
@@ -530,8 +505,8 @@ struct Core {
         scrollbar.bar.position.x = 0;
     }
 
-    void load_info_buffer() {
-        int index = selected_num.y * 16 + selected_num.x;
+    void load_info_buffer(glm::ivec2 selected) {
+        int index = selected.y * 16 + selected.x;
 
         std::vector<Vertex> vertex_vec;
         std::vector<glm::vec4> color_vec;
@@ -1160,20 +1135,32 @@ struct Core {
     }
 
     void reset_total_rows() {
-        rows_total = tabs[active_tab].bytes.size() / 16 + 1;
+        if(active_screen == TABS) {
+            rows_total = tabs.size();
+        } else {
+            rows_total = tabs[active_tab].bytes.size() / 16 + 1;
+        }
+        rows_shown = top_left_num_loc.y / (15 * text_size) + 1;
+
         scrollbar.max = std::max(rows_total - rows_shown, 0);
         int bar_size = std::max(double(rows_shown) / rows_total * scrollbar.length, 20.0);
+        scrollbar.update_pos(start_loc, true);
+        
         scrollbar.bar = {{10, bar_size}, {0, scrollbar.length - (1.0 - scrollbar.position) * (scrollbar.length - bar_size) - bar_size}};
     }
     
     void resize_screen() {
-        top_left_num_loc = {20 + 57 * text_size, screen_size.y - 31 * text_size - 13 * text_size};
+        if(active_screen == TABS) {
+            top_left_num_loc = {20 + 57 * text_size, screen_size.y - 28 * text_size};
+        } else {
+            top_left_num_loc = {20 + 57 * text_size, screen_size.y - 43 * text_size};
+        }
         rows_shown = top_left_num_loc.y / (15 * text_size) + 1;
 
         scrollbar.length = screen_size.y - 13 * text_size;
         reset_total_rows();
 
-        for(int i = 0; i < 6; i++) {
+        for(int i = 0; i < 7; i++) {
             buttons[i].box.position.y = screen_size.y - buttons[i].box.size.y;
         }
     }
@@ -1204,22 +1191,23 @@ struct Core {
 
 
 
-        buttons = std::vector<Button>(6);
+        buttons = std::vector<Button>(7);
 
         for(Button& b : buttons) {
             b.text.init_buffers();
         }
 
-        buttons[0].text.load_buffers(font, "Tabs", color, text_size);
-        buttons[1].text.load_buffers(font, "New", color, text_size);
-        buttons[2].text.load_buffers(font, "Open", color, text_size);
-        buttons[3].text.load_buffers(font, "Save", color, text_size);
-        buttons[4].text.load_buffers(font, "Save as", color, text_size);
-        buttons[5].text.load_buffers(font, "Settings", color, text_size);
+        buttons[0].text.load_buffers(font, "Editor", text_size);
+        buttons[1].text.load_buffers(font, "Tabs", text_size);
+        buttons[2].text.load_buffers(font, "New", text_size);
+        buttons[3].text.load_buffers(font, "Open", text_size);
+        buttons[4].text.load_buffers(font, "Save", text_size);
+        buttons[5].text.load_buffers(font, "Save as", text_size);
+        buttons[6].text.load_buffers(font, "Settings", text_size);
 
         pos = 0;
 
-        for(int i = 0; i < 6; i++) {
+        for(int i = 0; i < 7; i++) {
             Button& b = buttons[i];
             b.box = {b.text.size + glm::ivec2{10, 4} * text_size, {pos, 0}};
             pos += b.box.size.x;
@@ -1227,7 +1215,7 @@ struct Core {
         
         tabs.push_back(Tab());
         tabs[0].text.init_buffers();
-        tabs[0].text.load_buffers(font, "New file", color, text_size);
+        tabs[0].text.load_buffers(font, "New file", text_size);
 
         resize_screen();
     }
@@ -1275,7 +1263,7 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                             if(i >= core.end_loc) {
                                 delete_keys.push_back(i);
                             } else {
-                                t.load_buffers(core.text_mode, core.font, core.color, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                                t.load_buffers(core.text_mode, core.font, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                             }
                         }
                     }
@@ -1314,11 +1302,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 uint8_t& byte = core.tabs[core.active_tab].bytes[core.selected_num.y * 16 + core.selected_num.x];
                 if(core.input_status == 0 || core.input_status == -1) {
                     byte = (codepoint - '0') << 4;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
                     core.input_status = 1;
                 } else if(core.input_status == 1) {
                     byte |= codepoint - '0';
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
 
                     ++core.selected_num.x;
@@ -1336,7 +1324,7 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             } else if(codepoint >= 'a' && codepoint <= 'f') {
                 Text_row& row = core.byte_rows[core.selected_num.y];
                 if(core.selected_num.y * 16 + core.selected_num.x == core.tabs[core.active_tab].bytes.size()) {
@@ -1351,11 +1339,11 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 uint8_t& byte = core.tabs[core.active_tab].bytes[core.selected_num.y * 16 + core.selected_num.x];
                 if(core.input_status == 0 || core.input_status == -1) {
                     byte = (codepoint - 'a' + 0xA) << 4;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
                     core.input_status = 1;
                 } else if(core.input_status == 1) {
                     byte |= codepoint - 'a' + 0xA;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                     
                     ++core.selected_num.x;
@@ -1373,7 +1361,7 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             } else if(codepoint >= 'A' && codepoint <= 'F') {
                 Text_row& row = core.byte_rows[core.selected_num.y];
                 if(core.selected_num.y * 16 + core.selected_num.x == core.tabs[core.active_tab].bytes.size()) {
@@ -1388,12 +1376,12 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                 uint8_t& byte = core.tabs[core.active_tab].bytes[core.selected_num.y * 16 + core.selected_num.x];
                 if(core.input_status == 0 || core.input_status == -1) {
                     byte = (codepoint - 'A' + 0xA) << 4;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 1);
                     core.input_status = 1;
 
                 } else if(core.input_status == 1) {
                     byte |= codepoint - 'A' + 0xA;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
 
                     ++core.selected_num.x;
@@ -1411,7 +1399,7 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             }
         }
     }
@@ -1449,7 +1437,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                         --core.selected_num.x;
                     }
 
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
 
                     if(core.start_loc > core.selected_num.y && core.selected_num.y != -1) { // flag
                         core.start_loc = core.selected_num.y;
@@ -1484,7 +1472,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                                 if(i >= core.end_loc) {
                                     delete_keys.push_back(i);
                                 } else {
-                                    t.load_buffers(core.text_mode, core.font, core.color, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                                    t.load_buffers(core.text_mode, core.font, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                                 }
                             }
                         }
@@ -1496,7 +1484,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     }
                 } else if(core.input_status == 1 || core.input_status == -1) {
                     core.tabs[core.active_tab].bytes[loc] = 0;
-                    row.load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 0);
+                    row.load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten, core.selected_num.x, 0);
                     core.input_status = 0;
                 } else if(core.input_status == 0) {
                     core.tabs[core.active_tab].bytes.erase(core.tabs[core.active_tab].bytes.begin() + loc);
@@ -1510,7 +1498,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             if(i >= core.end_loc) {
                                 delete_keys.push_back(i);
                             } else {
-                                t.load_buffers(core.text_mode, core.font, core.color, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                                t.load_buffers(core.text_mode, core.font, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                             }
                         }
                     }
@@ -1538,7 +1526,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             }
         }
     } else if(key == GLFW_KEY_ENTER) {
@@ -1556,7 +1544,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                             if(i >= core.end_loc) {
                                 delete_keys.push_back(i);
                             } else {
-                                t.load_buffers(core.text_mode, core.font, core.color, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                                t.load_buffers(core.text_mode, core.font, core.text_size, i * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                             }
                         }
                     }
@@ -1565,7 +1553,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                         core.byte_rows.erase(key);
                     }
                 } else {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
                 ++core.selected_num.x;
@@ -1587,7 +1575,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
                 core.selected_num.y = -1;
@@ -1599,7 +1587,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -1607,7 +1595,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                 if(new_select != core.selected_num) {
                     core.selected_num = new_select;
-                    core.load_info_buffer();
+                    core.load_info_buffer(core.selected_num);
                 }
 
                 if(core.start_loc > core.selected_num.y && core.selected_num.y != -1) { // flag
@@ -1618,14 +1606,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             }
         }
     } else if(key == GLFW_KEY_DOWN) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -1636,7 +1624,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                 if(new_select != core.selected_num) {
                     core.selected_num = new_select;
-                    if(core.selected_num.y * 16 + core.selected_num.x != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer();
+                    if(core.selected_num.y * 16 + core.selected_num.x != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
                 }
 
                 if(core.start_loc > core.selected_num.y && core.selected_num.y != -1) { // flag
@@ -1647,14 +1635,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             }
         }
     } else if(key == GLFW_KEY_RIGHT) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -1669,7 +1657,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                 if(new_select != core.selected_num) {
                     core.selected_num = new_select;
-                    if(core.selected_num.y * 16 + core.selected_num.x != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer();
+                    if(core.selected_num.y * 16 + core.selected_num.x != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
                 }
                 
                 if(core.start_loc > core.selected_num.y && core.selected_num.y != -1) { // flag
@@ -1680,14 +1668,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     core.scrollbar.update_pos(core.start_loc, true);
                 }
 
-                core.load_info_buffer();
+                core.load_info_buffer(core.selected_num);
             }
         }
     } else if(key == GLFW_KEY_LEFT) {
         if(action == GLFW_PRESS || action == GLFW_REPEAT) {
             if(core.selected_num.y != -1) {
                 if(core.input_status != -1) {
-                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
                     core.input_status = -1;
                 }
 
@@ -1703,7 +1691,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
                 if(new_select != core.selected_num) {
                     core.selected_num = new_select;
-                    core.load_info_buffer();
+                    core.load_info_buffer(core.selected_num);
                 }
                 
                 if(core.start_loc > core.selected_num.y && core.selected_num.y != -1) { // flag
@@ -1775,19 +1763,50 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
             for(int i : core.active_buttons) {
                 if(core.buttons[i].box.contains(core.cursor_pos)) {
+                    button_pressed = true;
                     if(i == 0) {
-                        core.active_screen = TABS;
-                    } else if(i == 1) {
-                        core.tabs[core.active_tab].bytes.clear();
-                        core.byte_rows.clear();
+                        if(core.active_screen != EDITOR) {
+                            core.active_screen = EDITOR;
+                            core.active_buttons = {1, 2, 3, 4, 5, 6};
 
-                        core.selected_num.y = -1;
-                        core.start_loc = 0;
+                            core.start_loc = core.tabs[core.active_tab].pos;
+                            core.selected_num = core.tabs[core.active_tab].selected;
+
+                            core.top_left_num_loc = {20 + 57 * core.text_size, core.screen_size.y - 43 * core.text_size};
+                            core.reset_total_rows();
+                        }
+                    } else if(i == 1) {
+                        if(core.active_screen != TABS) {
+                            core.active_screen = TABS;
+                            core.active_buttons = {0, 2, 3, 4, 5, 6};
+
+                            core.tabs[core.active_tab].pos = core.start_loc;
+                            core.tabs[core.active_tab].selected = core.selected_num;
+                            core.selected_num.y = core.active_tab;
+                            core.start_loc = 0;
+
+                            core.top_left_num_loc = {20 + 57 * core.text_size, core.screen_size.y - 28 * core.text_size};
+                            core.reset_total_rows();
+
+                        }
+                    } else if(i == 2) {
+                        core.active_tab = core.tabs.size();
+                        core.tabs.push_back(Tab());
+                        core.tabs[core.active_tab].text.init_buffers();
+                        core.tabs[core.active_tab].text.load_buffers(core.font, "New file", core.text_size);
+                        if(core.end_loc - core.start_loc == core.rows_shown) core.start_loc = core.scrollbar.max + 1;
+
+                        core.byte_rows.clear();
                         core.reset_total_rows();
                         core.set_scrollbar_pos();
-                    } else if(i == 2) {
+                    } else if(i == 3) {
                         std::string filepath = open_dialog();
                         if(filepath.size() != 0) {
+                            ++core.active_tab;
+                            core.tabs.push_back(Tab());
+                            core.tabs[core.active_tab].path = filepath;
+                            core.tabs[core.active_tab].text.init_buffers();
+                            core.tabs[core.active_tab].text.load_buffers(core.font, filepath, core.text_size);
                             core.tabs[core.active_tab].bytes = get_bytes_from_file(filepath.data());
                             core.selected_num.y = -1;
                             core.start_loc = 0;
@@ -1800,51 +1819,99 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                             core.byte_rows.clear();
                         }
                     } else if(i == 4) {
-                        std::string filepath = save_as_dialog();
-                        if(filepath.size() != 0) {
+                        if(core.tabs[core.active_tab].path.size() == 0) {
+                            std::string filepath = save_as_dialog();
+                            if(filepath.size() != 0) {
+                                std::ofstream file;
+                                file.open(filepath, std::ios::out | std::ios::binary | std::ios::trunc);
+                                file.write((char*)core.tabs[core.active_tab].bytes.data(), core.tabs[core.active_tab].bytes.size());
+                                file.close();
+
+                                core.tabs[core.active_tab].path = filepath;
+                                core.tabs[core.active_tab].text.load_buffers(core.font, filepath, core.text_size);
+                            }
+                        } else {
                             std::ofstream file;
-                            file.open(filepath, std::ios::out | std::ios::binary);
+                            file.open(core.tabs[core.active_tab].path, std::ios::out | std::ios::binary | std::ios::trunc);
                             file.write((char*)core.tabs[core.active_tab].bytes.data(), core.tabs[core.active_tab].bytes.size());
                             file.close();
                         }
                     } else if(i == 5) {
-                        core.active_screen = SETTINGS;
+                        std::string filepath = save_as_dialog();
+                        if(filepath.size() != 0) {
+                            std::ofstream file;
+                            file.open(filepath, std::ios::out | std::ios::binary | std::ios::trunc);
+                            file.write((char*)core.tabs[core.active_tab].bytes.data(), core.tabs[core.active_tab].bytes.size());
+                            file.close();
 
-                        core.byte_rows.clear();
-                        
-                        core.text_mode = !core.text_mode;
-                        if(core.input_status == 1) {
-                            core.byte_rows[core.selected_num.y * 16 + core.selected_num.x].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y, core.tabs[core.active_tab].bytes, core.ten);
-                            core.input_status = -1;
+                            core.tabs[core.active_tab].path = filepath;
+                            core.tabs[core.active_tab].text.load_buffers(core.font, filepath, core.text_size);
+                        }
+                    } else if(i == 6) {
+                        if(core.active_screen != SETTINGS) {
+                            core.active_screen = SETTINGS;
+
+                            core.byte_rows.clear();
+                            
+                            core.text_mode = !core.text_mode;
+                            if(core.input_status == 1) {
+                                core.byte_rows[core.selected_num.y * 16 + core.selected_num.x].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y, core.tabs[core.active_tab].bytes, core.ten);
+                                core.input_status = -1;
+                            }
+
+                            core.active_buttons = {0, 1, 2, 3, 4, 5};
                         }
                     }
                 }
             }
 
             if(!button_pressed) {
-                if(core.rows_total > core.rows_shown && core.scrollbar.bar.contains(core.cursor_pos)) {
-                    core.scrollbar.clicked_on = true;
-                } else {
-                    if(core.hovered_num.y >= core.start_loc && core.hovered_num.y <= core.end_loc && core.hovered_num.x >= 0 && core.hovered_num.x < 16) {
-                        int loc = core.hovered_num.x + core.hovered_num.y * 16;
-                        if(loc <= core.tabs[core.active_tab].bytes.size()) {
-                            if(core.selected_num != core.hovered_num) {
-                                core.selected_num = core.hovered_num;
-                                if(loc != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer();
-                            } else {
-                                core.selected_num.y = -1;
-                            }
+                if(core.active_screen == EDITOR) {
+                    if(core.rows_total > core.rows_shown && core.scrollbar.bar.contains(core.cursor_pos)) {
+                        core.scrollbar.clicked_on = true;
+                    } else {
+                        if(core.hovered_num.y >= core.start_loc && core.hovered_num.y <= core.end_loc && core.hovered_num.x >= 0 && core.hovered_num.x < 16) {
+                            int loc = core.hovered_num.x + core.hovered_num.y * 16;
+                            if(loc <= core.tabs[core.active_tab].bytes.size()) {
+                                if(core.selected_num != core.hovered_num) {
+                                    core.selected_num = core.hovered_num;
+                                    if(loc != core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
+                                } else {
+                                    core.selected_num.y = -1;
+                                }
 
-                            if(core.input_status != -1) {
-                                core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
-                            }
+                                if(core.input_status != -1) {
+                                    core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                                }
 
+                                core.input_status = -1;
+                            }
+                        } else if(core.selected_num.y != -1) {
+                            core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
+                            core.selected_num.y = -1;
                             core.input_status = -1;
                         }
-                    } else if(core.selected_num.y != -1) {
-                        core.byte_rows[core.selected_num.y].load_buffers(core.text_mode, core.font, core.color, core.text_size, core.selected_num.y * 0x10, core.tabs[core.active_tab].bytes, core.ten);
-                        core.selected_num.y = -1;
-                        core.input_status = -1;
+                    }
+                } else if(core.active_screen == TABS) {
+                    if(core.rows_total > core.rows_shown && core.scrollbar.bar.contains(core.cursor_pos)) {
+                        core.scrollbar.clicked_on = true;
+                    } else {
+                        if(core.hovered_num.y >= core.start_loc && core.hovered_num.y < core.end_loc) {
+                            if(core.active_tab == core.hovered_num.y) {
+                                core.active_screen = EDITOR;
+                                core.active_buttons = {1, 2, 3, 4, 5, 6};
+
+                                core.start_loc = core.tabs[core.active_tab].pos;
+                                core.selected_num = core.tabs[core.active_tab].selected;
+
+                                core.top_left_num_loc = {20 + 57 * core.text_size, core.screen_size.y - 43 * core.text_size};
+                                core.reset_total_rows();
+                            } else {
+                                core.byte_rows.clear();
+                                core.active_tab = core.hovered_num.y;
+                                if(core.tabs[core.active_tab].selected.y != -1) core.load_info_buffer(core.tabs[core.active_tab].selected);
+                            }
+                        }
                     }
                 }
             }
@@ -1892,25 +1959,31 @@ void Core::game_loop() {
     
     textures[0].bind(0);
 
-    for(int i : active_buttons) {
-        Button& b = buttons[i];
+    for(int i = 0; i < buttons.size(); i++) {
+        bool active = false;
 
-        shaders[0].use();
+        Button& b = buttons[i];
         b.text.vertex_buf.bind();
-        b.text.color_buf.bind(0);
 
         glm::mat3 transform_matrix = glm::translate(identity_matrix, glm::vec2(b.box.position) + glm::vec2{5 * text_size, 2 * text_size});
-
+        
+        shaders[0].use();
         glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
         glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
+        if(std::count(active_buttons.begin(), active_buttons.end(), i)) {
+            glUniform4fv(2, 1, &color[0]);
+            active = true;
+        } else {
+            glUniform4f(2, color.r, color.g, color.b, 0.5f);
+        } 
         glDrawArrays(GL_TRIANGLES, 0, b.text.vertex_buf.vertices);
 
-        if(b.box.contains(cursor_pos)) {
+        if(active && b.box.contains(cursor_pos)) {
             shaders[1].use();
             buffers[0].bind();
 
-            transform_matrix = glm::translate(identity_matrix, glm::vec2(b.box.position));
-            transform_matrix = glm::scale(transform_matrix, glm::vec2(b.box.size));
+            transform_matrix = glm::translate(identity_matrix, glm::vec2(buttons[i].box.position));
+            transform_matrix = glm::scale(transform_matrix, glm::vec2(buttons[i].box.size));
             glUniformMatrix3fv(0, 1, false, &transform_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
             glUniform4f(2, color.r, color.g, color.b, 0.5f);
@@ -1919,11 +1992,11 @@ void Core::game_loop() {
     }
 
     if(active_screen == EDITOR) {
-        glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 41 * text_size);
+        glm::vec2 translate_pos = glm::vec2(20, screen_size.y - 40 * text_size);
 
         glm::mat3 transform_matrix = glm::translate(identity_matrix, translate_pos);
 
-        glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 26 * text_size));
+        glm::mat3 num_matrix = glm::translate(identity_matrix, glm::vec2(20 + 63 * text_size, screen_size.y - 25 * text_size));
 
         shaders[0].use();
 
@@ -1938,14 +2011,14 @@ void Core::game_loop() {
 
             if(!t.vertex_buf.initialized) {
                 t.init_buffers();
-                t.load_buffers(text_mode, font, color, text_size, i * 0x10, tabs[active_tab].bytes, ten);
+                t.load_buffers(text_mode, font, text_size, i * 0x10, tabs[active_tab].bytes, ten);
             }
 
             t.vertex_buf.bind();
-            t.color_buf.bind(0);
 
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
+            glUniform4fv(2, 1, &color[0]);
             glDrawArrays(GL_TRIANGLES, 0, t.vertex_buf.vertices);
 
             translate_pos += glm::vec2(0, -15 * text_size);
@@ -1954,6 +2027,7 @@ void Core::game_loop() {
         }
 
         if(selected_num.y != -1 && selected_num.y * 16 + selected_num.x != tabs[active_tab].bytes.size()) {
+            shaders[2].use();
             buffers[2].bind();
             storage_buffers[1].bind(0);
             glm::mat3 info_matrix = glm::translate(identity_matrix, {20 + (font.glyph_map['0'].stride * 40 + 106) * text_size, screen_size.y - 26 * text_size});
@@ -2000,21 +2074,60 @@ void Core::game_loop() {
             glUniform4f(2, color.r, color.g, color.b, 0.5f);
             glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
         }
-    } else {
-        glm::vec2 translate_pos = {20 + 19 * text_size, screen_size.y - 26 * text_size};
+    } else if(active_screen == TABS) {
+        shaders[0].use();
+
+        glm::vec2 translate_pos = {20 + 19 * text_size, screen_size.y - 25 * text_size};
         glm::mat3 transform_matrix = glm::translate(identity_matrix, translate_pos);
 
-        for(Tab& t : tabs) {
+        for(int i = start_loc; i < end_loc; ++i) {
+            Tab& t = tabs[i];
             t.text.vertex_buf.bind();
-            t.text.color_buf.bind(0);
 
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
+            glUniform4fv(2, 1, &color[0]);
             glDrawArrays(GL_TRIANGLES, 0, t.text.vertex_buf.vertices);
 
             translate_pos += glm::vec2(0, -15 * text_size);
-
             transform_matrix = glm::translate(identity_matrix, translate_pos);
+        }
+
+        shaders[1].use();
+        buffers[0].bind();
+
+        if(active_tab >= start_loc && active_tab < end_loc) {
+            glm::mat3 hover_matrix = glm::translate(identity_matrix, glm::vec2(scrollbar.bar.size.x, top_left_num_loc.y - 15 * (active_tab - start_loc) * text_size));
+            hover_matrix = glm::scale(hover_matrix, glm::vec2{screen_size.x - scrollbar.bar.size.x, 15 * text_size});
+
+            glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
+            glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
+            glUniform4f(2, color.r, color.g, color.b, 0.25f);
+            glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
+        }
+        if(!scrollbar.clicked_on && hovered_num.y >= start_loc && hovered_num.y < end_loc && cursor_pos.x >= scrollbar.bar.size.x && hovered_num.y != active_tab) {
+            glm::mat3 hover_matrix = glm::translate(identity_matrix, glm::vec2(scrollbar.bar.size.x, top_left_num_loc.y - 15 * (hovered_num.y - start_loc) * text_size));
+            hover_matrix = glm::scale(hover_matrix, glm::vec2{screen_size.x - scrollbar.bar.size.x, 15 * text_size});
+
+            glUniformMatrix3fv(0, 1, false, &hover_matrix[0][0]);
+            glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
+            glUniform4f(2, color.r, color.g, color.b, 0.125f);
+            glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
+        }
+
+        glm::mat3 scrollbar_matrix = glm::scale(identity_matrix, {10, scrollbar.length});
+        glUniformMatrix3fv(0, 1, false, &scrollbar_matrix[0][0]);
+        glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
+        glUniform4f(2, color.r, color.g, color.b, 0.25f);
+        glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
+
+        if(rows_total > rows_shown) {
+            scrollbar_matrix = glm::translate(identity_matrix, glm::vec2(scrollbar.bar.position));
+            scrollbar_matrix = glm::scale(scrollbar_matrix, glm::vec2(scrollbar.bar.size));
+            glUniformMatrix3fv(0, 1, false, &scrollbar_matrix[0][0]);
+            glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
+            glUniform4f(2, color.r, color.g, color.b, 0.5f);
+            glDrawArrays(GL_TRIANGLES, 0, buffers[0].vertices);
         }
     }
 

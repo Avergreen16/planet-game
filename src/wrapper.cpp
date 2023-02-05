@@ -54,6 +54,22 @@ struct Buffer {
         a.initialized = false;
     };
 
+    Buffer& operator=(const Buffer&) = default;
+
+    Buffer& operator=(Buffer&& a) {
+        vertex_array = a.vertex_array;
+        vertex_buffer = a.vertex_buffer;
+        vertices = a.vertices;
+        initialized = true;
+
+        a.vertex_array = 0;
+        a.vertex_buffer = 0;
+        a.vertices = 0;
+        a.initialized = false;
+
+        return *this;
+    }
+
     void init() {
         initialized = true;
 

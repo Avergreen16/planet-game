@@ -31,7 +31,10 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
 }
 
 void Core::game_loop() {
-
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    glfwSwapBuffers(window);
 }
 
 int main() {

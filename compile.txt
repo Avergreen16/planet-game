@@ -10,8 +10,9 @@ g++ src/qoi_decoder.cpp -std=c++20 -I include -l mingw32 -o bin\qoi_decoder
 g++ src/binary_comp.cpp -std=c++20 -I include -l mingw32 -o bin\bin_comp
 g++ src/huffman_code.cpp -std=c++20 -I include -l mingw32 -o bin\huffman_code
 g++ src/png_comp.cpp -std=c++20 -I include -l mingw32 -o bin\png_comp
-g++ src/hex_editor.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -l comdlg32 -o bin\hex_editor
+g++ -mwindows -g3 src/hex_editor.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -l comdlg32 -l libstdc++ -o bin\hex_editor
 g++ src/windialog.cpp -std=c++20 -l mingw32 -o bin\windialog
+g++ -mwindows src/hex_quiz.cpp src/glad.c -std=c++20 -I include -L lib -l mingw32 -l glfw3 -l opengl32 -l gdi32 -l libstdc++ -o bin\hex_quiz
 
 /*const char* vss_raycast = R"""(
 #version 460 core

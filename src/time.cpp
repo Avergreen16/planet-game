@@ -2,6 +2,7 @@
 #include "wrapper.cpp"
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
@@ -100,35 +101,6 @@ void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph
     vertices.push_back({{pos.x + g.tex_width * size, pos.y + font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
 }
 
-std::string to_hex_string(int num) {
-    std::string return_string;
-    for(int i = sizeof(num) * 2 - 1; i >= 0; --i) {
-        uint8_t nibble = (num >> (i * 4)) & 0xF;
-        if(nibble == 0) {
-            if(return_string.size() != 0) return_string += '0';
-        } else if(nibble <= 9) {
-            return_string += '0' + nibble;
-        } else {
-            return_string += 0x80 + nibble - 0xA;
-        }
-    }
-    if(return_string.size() == 0) return_string = "0";
-    return return_string;
-}
-
-int to_hex_number(std::string string) {
-    int return_int = 0;
-    for(uint8_t c : string) {
-        return_int <<= 4;
-        if(c >= '0' && c <= '9') {
-            return_int |= c - '0';
-        } else if(c >= 0x80 && c <= 0x85) {
-            return_int |= int(c) - 0x80 + 0xA;
-        }
-    }
-    return return_int;
-}
-
 struct Text {
     Buffer vertex_buf;
     glm::ivec2 size;
@@ -163,66 +135,84 @@ struct Text {
     }
 };
 
+std::string to_hex_string(uint16_t num) {
+    std::string return_string;
+    for(int i = sizeof(num) * 2 - 1; i >= 0; --i) {
+        uint8_t nibble = (num >> (i * 4)) & 0xF;
+        if(nibble == 0) {
+            return_string += '0';
+        } else if(nibble <= 9) {
+            return_string += '0' + nibble;
+        } else {
+            return_string += 0x80 + nibble - 0xA;
+        }
+    }
+    if(return_string.size() == 0) return_string = "0";
+    return return_string;
+}
+
 struct Core {
     bool game_running = true;
     GLFWwindow* window;
-    glm::ivec2 screen_size = {800, 600};
-    glm::ivec2 viewport_size = {800, 600};
+    glm::ivec2 screen_size = {256, 256};
+    glm::ivec2 viewport_size = {256, 256};
 
     Shader text_shader;
     Font_data font;
     Texture font_texture;
 
-    Text prompt;
-    Text input;
-    Text result;
+    Text hex_time;
+    Text dec_time;
 
-    std::vector<int> focusA = std::vector<int>{2, 3, 4};
-    std::vector<int> focusB = std::vector<int>{};
-
-    bool answered = false;
-    bool correct = false;
-    int correct_answer = 0;
-    float addition_prob = 0.5f;
-
-    std::string input_text;
+    int h_units = -1;
+    int sec = -1;
 
     void resize() {
-        prompt.position = screen_size / 2 + glm::ivec2{-font.glyph_map['0'].tex_width * 2 - prompt.size.x / 2, 0};
-
-        input.position = prompt.position + glm::ivec2{prompt.size.x + font.glyph_map[' '].stride * 2 + 2, 0};
-
-        result.position = screen_size / 2 + glm::ivec2(-result.size.x / 2, -font.line_spacing * 2);
+        dec_time.position = screen_size / 2 + glm::ivec2{-dec_time.size.x / 2, font.line_height * 1.5};
+        hex_time.position = screen_size / 2 + glm::ivec2{-hex_time.size.x / 2, -font.line_height * 4.5};
     }
 
-    void new_question() {
-        input_text.clear();
-        input.vertex_buf.vertices = 0;
+    void get_time() {
+        std::chrono::milliseconds mil = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+        uint64_t ms_day = ((mil.count() - 18000000) % 86400000);
+        int milliseconds = ms_day % 1000;
+        int seconds = (ms_day - milliseconds) % 60000;
+        uint16_t hex_units = 0x10000 * (double(ms_day) / 86400000);
 
-        char operation = (rand() < RAND_MAX * addition_prob) ? '+' : '*';
+        if(seconds != sec) {
+            sec = seconds;
 
-        int num1;
-        int num2;
-        if(operation == '+') {
-            num1 = rand() % 0xFF + 1;
-            num2 = rand() % 0xFF + 1;
-        } else {
-            if(rand() & 1) {
-                num1 = (focusB.size() == 0) ? rand() % 14 + 2 : focusB[rand() % focusB.size()];
-                num2 = (focusA.size() == 0) ? rand() % 14 + 2 : focusA[rand() % focusA.size()];
-            } else {
-                num1 = (focusA.size() == 0) ? rand() % 14 + 2 : focusA[rand() % focusA.size()];
-                num2 = (focusB.size() == 0) ? rand() % 14 + 2 : focusB[rand() % focusB.size()];
-            }
+            int minutes = (ms_day - seconds - milliseconds) % 3600000;
+            int hours = (ms_day / 3600000) % 12;
+            std::string h;
+            std::string m;
+            std::string s;
+            std::string ms;
+
+            if(hours == 0) hours = 12;
+            if(hours < 10) h = "0";
+            h += std::to_string(hours);
+            
+            minutes /= 60000;
+            if(minutes < 10) m = "0";
+            m += std::to_string(minutes);
+
+            seconds /= 1000;
+            if(seconds < 10) s = "0";
+            s += std::to_string(seconds);
+
+            std::string d_time = h + ":" + m + ":" + s;
+
+            dec_time.load_buffers(font, d_time, 3);
         }
-        
-        if(operation == '*') correct_answer = num1 * num2;
-        else correct_answer = num1 + num2;
 
-        prompt.load_buffers(font, to_hex_string(num1) + " " + operation + " " + to_hex_string(num2) + " =", 2);
-        answered = false;
+        if(hex_units != h_units) {
+            h_units = hex_units;
+            std::string h_time = to_hex_string(hex_units);
+            h_time.insert(h_time.begin() + 2, ':');
 
-        resize();
+            hex_time.load_buffers(font, h_time, 3);
+        }
     }
 
     void init() {
@@ -230,11 +220,10 @@ struct Core {
         font.load_font_data("res\\text_data.bin");
         font_texture.load("res\\text.png");
 
-        prompt.init_buffers();
-        input.init_buffers();
-        result.init_buffers();
-
-        new_question();
+        hex_time.init_buffers();
+        dec_time.init_buffers();
+        
+        get_time();
         resize();
     }
 
@@ -255,52 +244,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     core.game_loop();
 }
 
-void char_callback(GLFWwindow* window, unsigned int codepoint) {
-    Core& core = *(Core*)glfwGetWindowUserPointer(window);
-
-    if(codepoint >= '0' && codepoint <= '9') {
-        core.input_text += codepoint;
-    } else if(codepoint >= 'a' && codepoint <= 'f') {
-        core.input_text += 0x80 + codepoint - 'a';
-    } else if(codepoint >= 'A' && codepoint <= 'F') {
-        core.input_text += 0x80 + codepoint - 'A';
-    }
-
-    core.input.load_buffers(core.font, core.input_text, 2);
-}
-
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    Core& core = *(Core*)glfwGetWindowUserPointer(window);
-
-    if(key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT) && core.input_text.size() != 0) {
-        core.input_text.pop_back();
-        core.input.load_buffers(core.font, core.input_text, 2);
-    } else if(key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
-        if(core.answered) {
-            core.new_question();
-        } else if(core.input_text.size() != 0) {
-            int answer = to_hex_number(core.input_text);
-            if(answer == core.correct_answer) {
-                core.correct = true;
-                core.result.load_buffers(core.font, "Correct!", 2);
-                core.result.position = core.screen_size / 2 + glm::ivec2(-core.result.size.x / 2, -core.font.line_spacing * 2);
-            } else {
-                core.correct = false;
-                core.result.load_buffers(core.font, "Incorrect... the correct answer is " + to_hex_string(core.correct_answer), 2);
-                core.result.position = core.screen_size / 2 + glm::ivec2(-core.result.size.x / 2, -core.font.line_spacing * 2);
-            }
-            core.answered = true;
-        }
-    }
-}
-
-void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
-    Core& core = *(Core*)glfwGetWindowUserPointer(window);
-}
-
 void Core::game_loop() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    get_time();
 
     glm::mat3 view_matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(viewport_size / 2)));
     view_matrix = glm::translate(view_matrix, glm::vec2(-viewport_size / 2));
@@ -310,32 +258,21 @@ void Core::game_loop() {
     text_shader.use();
     font_texture.bind(0);
 
-    prompt.vertex_buf.bind();
-    transform_matrix = glm::translate(identity_matrix, glm::vec2(prompt.position));
+    dec_time.vertex_buf.bind();
+    transform_matrix = glm::translate(identity_matrix, glm::vec2(dec_time.position));
 
     glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
     glUniform4f(2, 0.0f, 1.0f, 0.0f, 1.0f);
-    glDrawArrays(GL_TRIANGLES, 0, prompt.vertex_buf.vertices);
+    glDrawArrays(GL_TRIANGLES, 0, dec_time.vertex_buf.vertices);
 
-    input.vertex_buf.bind();
-    transform_matrix = glm::translate(identity_matrix, glm::vec2(input.position));
+    hex_time.vertex_buf.bind();
+    transform_matrix = glm::translate(identity_matrix, glm::vec2(hex_time.position));
 
     glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
     glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
     glUniform4f(2, 0.0f, 1.0f, 0.0f, 1.0f);
-    glDrawArrays(GL_TRIANGLES, 0, input.vertex_buf.vertices);
-
-    if(answered) {
-        result.vertex_buf.bind();
-        transform_matrix = glm::translate(identity_matrix, glm::vec2(result.position));
-
-        glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
-        glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
-        if(correct) glUniform4f(2, 0.0f, 1.0f, 0.0f, 1.0f);
-        else glUniform4f(2, 1.0f, 0.0f, 0.0f, 1.0f);
-        glDrawArrays(GL_TRIANGLES, 0, result.vertex_buf.vertices);
-    }
+    glDrawArrays(GL_TRIANGLES, 0, hex_time.vertex_buf.vertices);
 
     glfwSwapBuffers(window);
 }
@@ -355,7 +292,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // create window
-    core.window = glfwCreateWindow(core.screen_size.x, core.screen_size.y, "Hex Quiz!", NULL, NULL);
+    core.window = glfwCreateWindow(core.screen_size.x, core.screen_size.y, "Hex Time", NULL, NULL);
     if(core.window == NULL) {
         std::cout << "ERROR: Window creation failed.\n";
         glfwTerminate();
@@ -374,8 +311,6 @@ int main() {
     glfwSetWindowUserPointer(core.window, &core);
 
     glfwSetFramebufferSizeCallback(core.window, framebuffer_size_callback);
-    glfwSetCharCallback(core.window, char_callback);
-    glfwSetKeyCallback(core.window, key_callback);
 
     core.init();
 

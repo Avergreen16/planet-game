@@ -55,6 +55,19 @@ std::string save_as_dialog() {
     return std::string(ofn.lpstrFile);
 }
 
+int to_hex_number(std::string string) {
+    int return_int = 0;
+    for(uint8_t c : string) {
+        return_int <<= 4;
+        if(c >= '0' && c <= '9') {
+            return_int |= c - '0';
+        } else if(c >= 0x80 && c <= 0x85) {
+            return_int |= int(c) - 0x80 + 0xA;
+        }
+    }
+    return return_int;
+}
+
 std::string get_text_from_file(char* path) {
     std::ifstream file;
     file.open(path);
@@ -473,9 +486,9 @@ struct Core {
 
     void load_assets() {
         shaders = std::vector<Shader>(3);
-        textures = std::vector<Texture>(1);
-        buffers = std::vector<Buffer>(6);
-        texts = std::vector<Text>(2);
+        textures = std::vector<Texture>(2);
+        buffers = std::vector<Buffer>(7);
+        texts = std::vector<Text>(3);
         storage_buffers = std::vector<Storage_buffer>(2);
         
         shaders[0].compile(get_text_from_file("res\\shaders\\text_color.vs").data(), get_text_from_file("res\\shaders\\text_color.fs").data());
@@ -483,6 +496,7 @@ struct Core {
         shaders[2].compile(get_text_from_file("res\\shaders\\text.vs").data(), get_text_from_file("res\\shaders\\text.fs").data());
 
         textures[0].load("res\\text.png");
+        textures[1].load("res\\cursor.png");
         load_font();
 
         std::vector<glm::vec2> vertex_vec;
@@ -497,6 +511,19 @@ struct Core {
         buffers[0].init();
         buffers[0].set_data(vertex_vec.data(), vertex_vec.size(), sizeof(glm::vec2));
         buffers[0].set_attrib(0, 2, sizeof(float) * 2, 0);
+
+        std::vector<Vertex> vertex_vec1;
+        vertex_vec1.push_back({{0, 0}, {0, 0}});
+        vertex_vec1.push_back({{1, 0}, {16, 0}});
+        vertex_vec1.push_back({{0, 1}, {0, 16}});
+        vertex_vec1.push_back({{0, 1}, {0, 16}});
+        vertex_vec1.push_back({{1, 0}, {16, 0}});
+        vertex_vec1.push_back({{1, 1}, {16, 16}});
+
+        buffers[6].init();
+        buffers[6].set_data(vertex_vec1.data(), vertex_vec1.size(), sizeof(Vertex));
+        buffers[6].set_attrib(0, 2, sizeof(float) * 4, 0);
+        buffers[6].set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
         buffers[2].init();
         storage_buffers[1].init();
@@ -832,62 +859,6 @@ struct Core {
                 num64 |= uint64_t(tabs[active_tab].bytes[index + i]) << (8 * (7 - i));
             }
 
-            std::string str = "binary: ";
-
-            for(int i = 7; i >= 0; i--) {
-                if((tabs[active_tab].bytes[index] >> i) & 1) str += '1';
-                else str += '0';
-            }
-
-            for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
-
-                if(g.visible) {
-                    insert_char(vertex_vec, font, text_size, g, pos);
-                    color_vec.push_back(color);
-                }
-                pos.x += g.stride * text_size;
-            }
-            
-            pos.x = 0;
-            pos.y -= (font.line_spacing + 5) * text_size;
-
-
-
-            str = "uint8: " + std::to_string(tabs[active_tab].bytes[index]);
-
-            for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
-
-                if(g.visible) {
-                    insert_char(vertex_vec, font, text_size, g, pos);
-                    color_vec.push_back(color);
-                }
-                pos.x += g.stride * text_size;
-            }
-
-            pos.x = 0;
-            pos.y -= (font.line_spacing + 5) * text_size;
-
-
-
-            str = "int8: " + std::to_string(int8_t(tabs[active_tab].bytes[index]));
-
-            for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
-
-                if(g.visible) {
-                    insert_char(vertex_vec, font, text_size, g, pos);
-                    color_vec.push_back(color);
-                }
-                pos.x += g.stride * text_size;
-            }
-
-            pos.x = 0;
-            pos.y -= (font.line_spacing + 5) * text_size;
-
-
-
             str = "uint16: ";
             if(index + 1 >= tabs[active_tab].bytes.size()) {
                 str += "[EOF]";
@@ -1159,6 +1130,7 @@ struct Core {
 
         buttons[10].box.position.y = screen_size.y - 30 * text_size;
         buttons[11].box.position.y = screen_size.y - 45 * text_size;
+        buttons[12].box.position.y = screen_size.y - 60 * text_size;
     }
 
     void load_byte_rows() {
@@ -1210,7 +1182,10 @@ struct Core {
         texts[1].init_buffers();
         texts[1].load_buffers(font, "Color:", text_size);
 
-        buttons = std::vector<Button>(12);
+        texts[2].init_buffers();
+        texts[2].load_buffers(font, "Endianness:", text_size);
+
+        buttons = std::vector<Button>(13);
 
         for(Button& b : buttons) {
             b.text.init_buffers();
@@ -1228,7 +1203,8 @@ struct Core {
         buttons[8].text.load_buffers(font, "Don't Save", text_size);
         buttons[9].text.load_buffers(font, "Cancel", text_size);
         buttons[10].text.load_buffers(font, "Hex", text_size);
-        buttons[11].text.load_buffers(font, "00FF00", text_size);
+        buttons[11].text.load_buffers(font, "00\u0085\u008500", text_size);
+        buttons[12].text.load_buffers(font, "Little", text_size);
 
         glm::ivec2 position = {0, 0};
 
@@ -1248,6 +1224,7 @@ struct Core {
     
         buttons[10].box = {{glm::ivec2{23 + 10, 9 + 6} * text_size}, {texts[0].size.x + 10 * text_size, 0}};
         buttons[11].box = {{buttons[11].text.size + glm::ivec2{10, 6} * text_size}, {texts[1].size.x + 10 * text_size, 0}};
+        buttons[12].box = {{buttons[12].text.size + glm::ivec2{10, 6} * text_size}, {texts[2].size.x + 10 * text_size, 0}};
         
         tabs.push_back(Tab());
         tabs[0].text.init_buffers();
@@ -1307,8 +1284,8 @@ struct Core {
             case SETTINGS: {
                 active_screen = SETTINGS;
 
-                visible_buttons = {0, 1, 2, 3, 4, 5, 6, 10, 11};
-                active_buttons = {0, 1, 2, 3, 4, 5, 10, 11};
+                visible_buttons = {0, 1, 2, 3, 4, 5, 6, 10, 11, 12};
+                active_buttons = {0, 1, 2, 3, 4, 5, 10, 11, 12};
                 tabs[active_tab].pos = start_loc;
                 tabs[active_tab].selected = selected_num;
                 
@@ -1347,22 +1324,32 @@ void char_callback(GLFWwindow* window, unsigned int codepoint) {
     Core& core = *(Core*)glfwGetWindowUserPointer(window);
 
     if(core.edit_color) {
-        if(('0' <= codepoint && '9' >= codepoint) || ('A' <= codepoint && 'F' >= codepoint)) {
+        if(('0' <= codepoint && '9' >= codepoint)) {
             core.color_string += codepoint;
 
             core.buttons[11].text.load_buffers(core.font, core.color_string, core.text_size);
             if(core.color_string.size() >= 6) {
-                int color = std::stoi(core.color_string, 0, 16);
+                int color = to_hex_number(core.color_string);
+                core.color = {float((color >> 16) & 0xFF) / 255, float((color >> 8) & 0xFF) / 255, float(color & 0xFF) / 255, 1.0f};
+                if(core.selected_num.y * 16 + core.selected_num.x < core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
+                core.edit_color = false;
+            }
+        } else if ('A' <= codepoint && 'F' >= codepoint) {
+            core.color_string += (codepoint - 'A') + 0x80;
+
+            core.buttons[11].text.load_buffers(core.font, core.color_string, core.text_size);
+            if(core.color_string.size() >= 6) {
+                int color = to_hex_number(core.color_string);
                 core.color = {float((color >> 16) & 0xFF) / 255, float((color >> 8) & 0xFF) / 255, float(color & 0xFF) / 255, 1.0f};
                 if(core.selected_num.y * 16 + core.selected_num.x < core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
                 core.edit_color = false;
             }
         } else if('a' <= codepoint && 'f' >= codepoint) {
-            core.color_string += (codepoint - 32);
+            core.color_string += (codepoint - 'a') + 0x80;
 
             core.buttons[11].text.load_buffers(core.font, core.color_string, core.text_size);
             if(core.color_string.size() >= 6) {
-                int color = std::stoi(core.color_string, 0, 16);
+                int color = to_hex_number(core.color_string);
                 core.color = {float((color >> 16) & 0xFF) / 255, float((color >> 8) & 0xFF) / 255, float(color & 0xFF) / 255, 1.0f};
                 if(core.selected_num.y * 16 + core.selected_num.x < core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
                 core.edit_color = false;
@@ -2117,6 +2104,16 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                             }
                             break;
                         }
+                        case 12: {
+                            core.big_endian = !core.big_endian;
+                            if(core.big_endian) {
+                               core.buttons[12].text.load_buffers(core.font, "Big", core.text_size);
+                            } else {
+                                core.buttons[12].text.load_buffers(core.font, "Little", core.text_size);
+                            }
+                            int loc = core.selected_num.x + core.selected_num.y * 16;
+                            if(loc >= 0 && loc < core.tabs[core.active_tab].bytes.size()) core.load_info_buffer(core.selected_num);
+                        }
                     }
                 }
             }
@@ -2471,7 +2468,27 @@ void Core::game_loop() {
         glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
         glUniform4fv(2, 1, &color[0]);
         glDrawArrays(GL_TRIANGLES, 0, texts[1].vertex_buf.vertices);
+
+        texts[2].vertex_buf.bind();
+        transform_matrix = glm::translate(transform_matrix, glm::vec2{0, -15 * text_size});
+        glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
+        glUniformMatrix3fv(1, 1, false, &transform_matrix[0][0]);
+        glUniform4fv(2, 1, &color[0]);
+        glDrawArrays(GL_TRIANGLES, 0, texts[2].vertex_buf.vertices);
     }
+
+    glm::mat3 cursor_matrix = glm::translate(identity_matrix, glm::vec2(cursor_pos.x, cursor_pos.y - 32));
+    cursor_matrix = glm::scale(cursor_matrix, {32, 32});
+
+    shaders[0].use();
+    textures[1].bind(0);
+    buffers[6].bind();
+
+    glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
+    glUniformMatrix3fv(1, 1, false, &cursor_matrix[0][0]);
+    glUniform4fv(2, 1, &color[0]);
+    glDrawArrays(GL_TRIANGLES, 0, buffers[6].vertices);
+
 
     glfwSwapBuffers(window);
 }
@@ -2498,6 +2515,8 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(core.window);
+
+    glfwSetInputMode(core.window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
     // init glad and set viewport
     if(!gladLoadGL()) {

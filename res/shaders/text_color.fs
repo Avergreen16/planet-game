@@ -7,7 +7,7 @@ in vec2 tex_coord;
 out vec4 frag_color;
 
 void main() {
-    float alpha = texelFetch(text_texture, ivec2(tex_coord), 0).a;
+    ivec2 i_tex_coord = ivec2(tex_coord);
+    float alpha = texelFetch(text_texture, i_tex_coord, 0).a;
     if(alpha != 0.0) frag_color = color;
-    else discard;
 }

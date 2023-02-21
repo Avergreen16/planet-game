@@ -177,13 +177,13 @@ struct Core {
     Text input;
     Text result;
 
-    std::vector<int> focusA = std::vector<int>{2, 3, 4};
+    std::vector<int> focusA = std::vector<int>{2, 3, 4, 5};
     std::vector<int> focusB = std::vector<int>{};
 
     bool answered = false;
     bool correct = false;
     int correct_answer = 0;
-    float addition_prob = 0.5f;
+    float addition_prob = 0.0625f;
 
     std::string input_text;
 

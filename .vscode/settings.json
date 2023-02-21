@@ -84,6 +84,7 @@
         "cinttypes": "cpp",
         "set": "cpp",
         "any": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "variant": "cpp"
     }
 }

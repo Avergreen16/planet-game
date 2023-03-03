@@ -1,6 +1,6 @@
 #pragma once
 
-#include "global.cpp"
+#include "includes.cpp"
 
 /*struct Vertex {
     glm::vec3 position;
@@ -28,16 +28,11 @@ struct Buffer {
     int vertices = 0;
     bool initialized = false;
 
-    Buffer(Buffer& a) {
+    Buffer(const Buffer& a) {
         vertex_array = a.vertex_array;
         vertex_buffer = a.vertex_buffer;
         vertices = a.vertices;
-        initialized = true;
-
-        a.vertex_array = 0;
-        a.vertex_buffer = 0;
-        a.vertices = 0;
-        a.initialized = false;
+        initialized = a.initialized;
     }
     
     Buffer() = default;

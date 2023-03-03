@@ -52,4 +52,40 @@ struct Button {
     }
 };
 
-using any_widget = std::variant<Button>;
+struct Text {
+    Buffer vertex_buf;
+    AABB box = {{0, 0}, {0, 0}};
+    glm::vec4 color;
+
+    void init_buffers() {
+        vertex_buf.init();
+    }
+
+    void load_buffers(Font_data& font, std::string text, int size) {
+        int pos = 0;
+
+        std::vector<Vertex> vertices;
+        std::vector<glm::vec4> colors;
+
+        for(char c : text) {
+            if(font.glyph_map.contains(c)) {
+                Glyph_data& g = font.glyph_map[c];
+                
+                if(g.visible) {
+                    insert_char(vertices, font, size, g, {pos, 0});
+                }
+                pos += g.stride * size;
+            }
+        }
+
+        vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
+        vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
+        vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
+
+        box.size = glm::ivec2{std::max(0, pos - 1 * size), font.line_height * size};
+    }
+
+    void draw();
+};
+
+using any_widget = std::variant<Button, Text>;

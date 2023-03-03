@@ -12,6 +12,8 @@
 #include <any>
 #include <functional>
 #include <variant>
+#include <fstream>
+#include <sstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION

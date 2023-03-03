@@ -1,10 +1,22 @@
 #define USE_2D
 #include "gui_func.cpp"
 
-glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-
 void Core::init() {
-    widgets = {Button(b0_click, b0_draw)};
+    view_matrix = glm::inverse(glm::scale(identity_matrix, glm::vec2(viewport_size / 2)));
+    view_matrix = glm::translate(view_matrix, glm::vec2(-viewport_size / 2));
+
+    widgets = {Button(b0_click, b0_draw), Text()};
+    std::get<1>(widgets[1]).init_buffers();
+    std::get<1>(widgets[1]).load_buffers(font, "Hello world!", 2);
+    std::get<1>(widgets[1]).color = {0.0, 1.0, 0.0, 1.0};
+    //std::get<1>(widgets[1]).box.position = {0, 0};
+
+    shaders = std::vector<Shader>{_NUM_SHADERS};
+    shaders[_text_col].compile(get_text_from_file("res/shaders/text_color.vs").data(), get_text_from_file("res/shaders/text_color.fs").data());
+
+    stbi_set_flip_vertically_on_load(true);
+    textures = std::vector<Texture>{_NUM_TEXTURES};
+    textures[_text].load("res/text.png");
 }
 
 void Core::game_loop() {
@@ -18,7 +30,13 @@ void Core::game_loop() {
                 button.draw();
 
                 break;
-            };
+            }
+            case 1: {
+                Text& text = std::get<1>(a);
+
+                text.draw();
+                break;
+            }
         }
     }
     

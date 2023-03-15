@@ -96,22 +96,6 @@ void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph
     vertices.push_back({{pos.x + g.tex_width * size, pos.y + font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
 }
 
-std::string get_text_from_file(char* path) {
-    std::ifstream file;
-    file.open(path);
-
-    if(file.is_open()) {
-        std::stringstream ss;
-        ss << file.rdbuf();
-        return ss.str();
-
-    } else {
-        std::cout << "failed to open file " << path << std::endl;
-    }
-
-    file.close();
-}
-
 std::vector<uint8_t> get_bytes_from_file(char* path) {
     std::vector<uint8_t> bytes;
 
@@ -132,4 +116,139 @@ std::vector<uint8_t> get_bytes_from_file(char* path) {
     file.close();
 
     return bytes;
+}
+
+uint8_t to_digit(int num) {
+    if(num < 10) {
+        return '0' + num;
+    } else if(num < 16) {
+        return 0x80 + num - 0xA;
+    } else {
+        return 'A' + num - 0x10;
+    }
+}
+
+int from_digit(uint8_t c) {
+    if(c >= '0' && c <= '9') {
+        return c - '0';
+    } else if(c >= 0x80 && c <= 0x85) {
+        return c - 0x80;
+    } else if(c >= 'A') {
+        return c - 'A';
+    }
+}
+
+std::string to_base(int num, int base) {
+    bool is_neg = num < 0;
+    num = abs(num);
+
+    std::string inverse;
+    if(num == 0) {
+        return "0";
+    } else {
+        while(num != 0) {
+            inverse += to_digit(num % base);
+            num /= base;
+        }
+    }
+
+    std::string ret;
+    if(is_neg) ret += '-';
+    for(int i = inverse.size() - 1; i >= 0; --i) {
+        ret += inverse[i];
+    }
+    return ret;
+}
+
+int to_int(std::string& str, int base) {
+    int ret = 0;
+    for(int i = 0; i < str.size() - 1; ++i) {
+        uint8_t c = str[str.size() - 1 - i];
+
+        if(c == '-') {
+            return -ret;
+        }
+
+        ret += from_digit(c) * pow(base, i);
+    }
+
+    return ret;
+}
+
+std::string to_balanced_trinary(int num) {
+    bool is_neg = num < 0;
+    num = abs(num);
+
+    std::string inverted_ret;
+    if(num == 0) {
+        inverted_ret = "0";
+    } else {
+        while(num != 0) {
+            inverted_ret += std::to_string(num % 3);
+            num /= 3;
+        }
+    }
+
+    bool prev_carry = false;
+    bool next_carry = false;
+    for(int i = 0; i < inverted_ret.size(); i++) {
+        uint8_t& current = *(uint8_t*)&inverted_ret[i];
+        if(current == '2') {
+            current = 0x86;
+            next_carry = true;
+        }
+
+        if(prev_carry == true) {
+            switch(current) {
+                case 0x86: {
+                    current = '0';
+                    break;
+                }
+                case '0': {
+                    current = '1';
+                    break;
+                }
+                case '1': {
+                    current = 0x86;
+                    next_carry = true;
+                    break;
+                }
+            }
+        }
+        prev_carry = next_carry;
+        next_carry = false;
+    }
+    if(prev_carry == true) {
+        inverted_ret += '1';
+    }
+
+    std::string ret;
+    if(is_neg) {
+        for(int i = inverted_ret.size() - 1; i >= 0; i--) {
+            if(inverted_ret[i] == 0x86) ret += '1';
+            else if(inverted_ret[i] == '1') ret += 0x86;
+            else ret += '0';
+        }
+    } else { 
+        for(int i = inverted_ret.size() - 1; i >= 0; i--) {
+            ret += inverted_ret[i];
+        }
+    }
+
+    return ret;
+}
+
+int from_balanced_trinary(std::string input) {
+    int ret = 0;
+    int size = input.size();
+    for(int i = 0; i < input.size(); i++) {
+        uint8_t c = input[i];
+        if(c == 0x86) {
+            ret -= std::pow(3, size - i - 1);
+        } else if(c == '1') {
+            ret += std::pow(3, size - i - 1);
+        }
+    }
+
+    return ret;
 }

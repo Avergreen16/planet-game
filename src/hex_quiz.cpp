@@ -177,7 +177,7 @@ struct Core {
     Text input;
     Text result;
 
-    std::vector<int> focusA = std::vector<int>{2, 3, 4, 5};
+    std::vector<int> focusA = std::vector<int>{5};
     std::vector<int> focusB = std::vector<int>{};
 
     bool answered = false;

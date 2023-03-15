@@ -183,7 +183,7 @@ struct Text_row {
             for(int i = line_num; i < line_num + bytes_num; ++i) {
                 Glyph_data g;
                 if(font.glyph_map.contains(bytes[i])) g = font.glyph_map[bytes[i]];
-                else g = font.glyph_map[0x87];
+                else g = font.glyph_map[0x88];
 
                 if(g.visible) insert_char(vertices, font, size, g, {pos + (5 - g.tex_width / 2) * size, 0});
 
@@ -251,7 +251,7 @@ struct Text_row {
                 } else {
                     Glyph_data g;
                     if(font.glyph_map.contains(bytes[i])) g = font.glyph_map[bytes[i]];
-                    else g = font.glyph_map[0x87];
+                    else g = font.glyph_map[0x88];
 
                     if(g.visible) insert_char(vertices, font, size, g, {pos + (5 - g.tex_width / 2) * size, 0});
 
@@ -830,7 +830,7 @@ struct Core {
                     pos.x += g.stride * text_size;
                 }
             } else {
-                str += 0x86;
+                str += 0x87;
 
                 for(char c : str) {
                     Glyph_data& g = font.glyph_map[c];
@@ -1078,7 +1078,7 @@ struct Core {
                     pos.x += g.stride * text_size;
                 }
             } else {
-                str += 0x86;
+                str += 0x87;
 
                 for(char c : str) {
                     Glyph_data& g = font.glyph_map[c];

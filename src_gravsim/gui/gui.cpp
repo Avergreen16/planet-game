@@ -59,13 +59,11 @@ struct Text {
         for(char c : text) {
             if(font.glyph_map.contains(c)) {
                 Glyph_data& g = font.glyph_map[c];
-
-                pos += g.advance1 * size;
                 
                 if(g.visible) {
                     insert_char(vertices, font, size, g, {pos, 0});
                 }
-                pos += (g.tex_width + g.advance2) * size;
+                pos += g.stride * size;
             }
         }
 
@@ -260,23 +258,6 @@ void Gui_core::calc() {
                 Text_box& a = std::get<2>(w);
 
                 a.calc();
-                break;
-            }
-        }
-    }
-    
-    for(Event& e : events) {
-        switch(e.index()) {
-            case 0: {
-                Key_event& k = std::get<0>(e);
-
-                if(k.key == GLFW_KEY_C && k.action == GLFW_PRESS) {
-                    int num = from_base(std::get<2>(widgets[1]).str, 10);
-                    int base = from_base(std::get<2>(widgets[2]).str, 10);
-
-                    std::get<1>(widgets[0]).load_buffers(font, to_base(num, base));
-                }
-
                 break;
             }
         }

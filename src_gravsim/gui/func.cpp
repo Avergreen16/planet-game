@@ -1,12 +1,12 @@
 #pragma once
-#include "wrapper.cpp"
+#include "..\wrapper.cpp"
 
 struct AABB {
     glm::ivec2 size;
     glm::ivec2 position;
 
     bool contains(glm::ivec2 point) {
-        return point.x >= position.x && point.x < position.x + size.x && point.y >= position.y && point.y < position.y + size.y;
+        return point.x >= position.x && point.x <= position.x + size.x && point.y >= position.y && point.y <= position.y + size.y;
     }
 
     bool contains(AABB box) {
@@ -21,10 +21,9 @@ struct Vertex {
 
 struct Glyph_data {
     bool visible;
+    uint8_t stride;
     uint16_t tex_coord;
     uint8_t tex_width;
-    uint8_t advance1;
-    uint8_t advance2;
 };
 
 struct Font_data {
@@ -54,10 +53,7 @@ struct Font_data {
                 Glyph_data data;
 
                 file.read((char*)&id, 1);
-                file.read((char*)&data.advance1, 1);
-                data.advance2 = 0;
-                data.tex_width = 0;
-                data.tex_coord = 0;
+                file.read((char*)&data.stride, 1);
 
                 data.visible = false;
 
@@ -72,10 +68,9 @@ struct Font_data {
                 Glyph_data data;
 
                 file.read((char*)&id, 1);
+                file.read((char*)&data.stride, 1);
                 file.read((char*)&data.tex_coord, 2);
                 file.read((char*)&data.tex_width, 1);
-                file.read((char*)&data.advance1, 1);
-                file.read((char*)&data.advance2, 1);
 
                 data.visible = true;
 
@@ -118,44 +113,6 @@ std::vector<uint8_t> get_bytes_from_file(char* path) {
     file.close();
 
     return bytes;
-}
-
-std::string integers = "0123456789\u0080\u0081\u0082\u0083\u0084\u0085";
-
-std::string to_base(int num, int base) {
-    std::string ret;
-
-    while(num > 0) {
-        ret += integers[num % base];
-        num /= base;
-    }
-
-    if(ret.size() == 0) ret = "0";
-
-    if(num < 0) ret += '-';
-    
-    std::reverse(ret.begin(), ret.end());
-    return ret;
-}
-
-int from_base(std::string num, int base) {
-    int ret = 0;
-
-    bool neg = false;
-    if(num[0] == '-') {
-        neg = true;
-        num.erase(0);
-    }
-
-    for(uint8_t c : num) {
-        ret *= base;
-        if(c >= '0' && c <= '9') ret += c - '0';
-        else if(c >= 0x80 && c <= 0x85) ret += c - 0x76;
-    }
-
-    if(neg) ret *= -1;
-
-    return ret;
 }
 
 /*uint8_t to_digit(int num) {

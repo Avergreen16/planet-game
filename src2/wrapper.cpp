@@ -1,6 +1,7 @@
 #pragma once
-
 #include "includes.cpp"
+
+glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
 std::string get_text_from_file(std::string path) {
     std::ifstream file;
@@ -66,8 +67,6 @@ struct Buffer {
 
         glGenBuffers(1, &vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-
-        std::cout << vertex_array << " " << vertex_buffer << " init\n";
     }
 
     void bind() {
@@ -81,10 +80,6 @@ struct Buffer {
         glBufferData(GL_ARRAY_BUFFER, num_vertices * size_per_vertex, ptr, usage);
     }
 
-    void get_ids() {
-        std::cout << vertex_array << " " << vertex_buffer << " get_ids\n";
-    }
-
     void set_attrib(int id, int values, int stride_bytes, int offset_bytes, GLuint type = GL_FLOAT) {
         glBindVertexArray(vertex_array);
         glVertexAttribPointer(id, values, type, GL_FALSE, stride_bytes, (void*)offset_bytes);
@@ -92,7 +87,6 @@ struct Buffer {
     }
 
     void delete_buffers() {
-        std::cout << vertex_array << " " << vertex_buffer << " delete_buffers\n";
         glDeleteBuffers(1, &vertex_buffer);
         glDeleteVertexArrays(1, &vertex_array);
         initialized = false;

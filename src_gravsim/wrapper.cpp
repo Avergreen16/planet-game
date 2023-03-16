@@ -2,6 +2,8 @@
 
 #include "includes.cpp"
 
+glm::mat3 identity_matrix = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
 std::string get_text_from_file(std::string path) {
     std::ifstream file;
     file.open(path);

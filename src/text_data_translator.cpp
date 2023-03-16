@@ -27,10 +27,11 @@ int main() {
         input >> number;
 
         bytes.push_back(counter + 0x21 + 1 * (counter + 0x21 >= 0x7F));
-        bytes.push_back(number + 1);
         bytes.push_back(pos & 255);
         bytes.push_back(pos >> 8);
         bytes.push_back(number);
+        bytes.push_back(0);
+        bytes.push_back(1);
 
         pos += number + 1;
 

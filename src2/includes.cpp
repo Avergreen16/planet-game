@@ -20,6 +20,6 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-#define GLM_SWIZZLE
+#define GLM_FORCE_SWIZZLE
 #include "glm\glm.hpp"
 #include "glm\gtx\matrix_transform_2d.hpp"

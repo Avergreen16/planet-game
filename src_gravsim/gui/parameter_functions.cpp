@@ -1,8 +1,12 @@
-#include "core2.cpp"
-#include "gui.cpp"
+#ifndef PSEUDO_INCLUDE
+#include "..\core.cpp"
+#endif
+
+#include "func.cpp"
 
 void Text::draw() {
-    glm::mat3 trans_mat = glm::translate(identity_matrix, glm::vec2(box.position));
+    glm::vec2 translate = glm::vec2{box.position.x < 0 ? core.screen_size.x + box.position.x : box.position.x, box.position.y < 0 ? core.screen_size.y + box.position.y : box.position.y};
+    glm::mat3 trans_mat = glm::translate(identity_matrix, translate);
 
     core.gui_core.shaders[s_text_col].use();
 
@@ -17,15 +21,6 @@ void Text::draw() {
 
 inline void Text_box::update_text() {
     text.load_buffers(core.gui_core.font, str);
-}
-
-void b0_click(Button& self) {
-    std::cout << "check -> click\n";
-}
-
-void b0_draw(Button& self) {
-    //std::cout << core.screen_size.x << " " << core.screen_size.y << "\n";
-    //std::cout << self.hitbox.position.x << " " << self.hitbox.position.y << " " << self.hitbox.size.x << " " << self.hitbox.size.y << "\n";
 }
 
 void tb0_calc(Text_box& self) {

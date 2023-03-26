@@ -1,8 +1,12 @@
+#ifndef PSEUDO_INCLUDE
+#include "..\core.cpp"
+#endif
+
 #include "func.cpp"
 
 void Text::draw() {
     glm::vec2 translate = glm::vec2{box.position.x < 0 ? core.screen_size.x + box.position.x : box.position.x, box.position.y < 0 ? core.screen_size.y + box.position.y : box.position.y};
-    glm::mat3 trans_mat = glm::translate(identity_matrix, translate);
+    glm::mat3 trans_mat = glm::translate(identity_matrix_3, translate);
 
     core.gui_core.shaders[s_text_col].use();
 
@@ -26,10 +30,10 @@ void tb0_calc(Text_box& self) {
         self.hovered = false;
     }
 
-    for(Event& e : core.gui_core.events) {
+    for(event& e : core.gui_core.events) {
         switch(e.index()) {
             case 0: {
-                Key_event& a = std::get<0>(e);
+                key_event& a = std::get<0>(e);
                 switch(a.key) {
                     case GLFW_KEY_LEFT: {
                         if(a.action == GLFW_PRESS || a.action == GLFW_REPEAT) {
@@ -73,7 +77,7 @@ void tb0_calc(Text_box& self) {
                 break;
             }
             case 1: {
-                Mouse_button_event& a = std::get<1>(e);
+                mouse_button_event& a = std::get<1>(e);
                 if(a.button == GLFW_MOUSE_BUTTON_LEFT) {
                     if(a.action == GLFW_PRESS) {
                         if(self.hovered) {
@@ -110,7 +114,7 @@ void tb0_calc(Text_box& self) {
                 break;
             }
             case 2: {
-                Char_event& a = std::get<2>(e);
+                char_event& a = std::get<2>(e);
                 if(self.selected) {
                     uint8_t c;
                     if(core.key_map[GLFW_KEY_RIGHT_SHIFT] && a.c >= 'A' && a.c <= 'F') {
@@ -140,7 +144,7 @@ void tb0_draw(Text_box& self) {
         core.gui_core.shaders[s_flat].use();
         
         glm::vec4 select_color = {self.text.color.rgb(), 0.25};
-        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.box.position}), glm::vec2{self.box.size});
+        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.box.position}), glm::vec2{self.box.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);
@@ -148,7 +152,7 @@ void tb0_draw(Text_box& self) {
 
         glDrawArrays(GL_TRIANGLES, 0, core.gui_core.buffers[b_rect].vertices);
 
-        trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.text.box.position + self.pos_coord}), glm::vec2{self.text.size, 9 * self.text.size});
+        trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.text.box.position + self.pos_coord}), glm::vec2{self.text.size, 9 * self.text.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);
@@ -160,7 +164,7 @@ void tb0_draw(Text_box& self) {
         core.gui_core.shaders[s_flat].use();
         
         glm::vec4 hover_color = {self.text.color.rgb(), 0.125};
-        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.box.position}), glm::vec2{self.box.size});
+        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.box.position}), glm::vec2{self.box.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);

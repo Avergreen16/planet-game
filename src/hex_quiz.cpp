@@ -10,7 +10,7 @@ struct Vertex {
     glm::vec2 tex_coords;
 };
 
-struct Glyph_data {
+struct glyph_data {
     bool visible;
     uint8_t stride;
     uint16_t tex_coord;
@@ -20,10 +20,10 @@ struct Glyph_data {
 struct Font_data {
     uint8_t line_height;
     uint8_t line_spacing;
-    Glyph_data empty_data = {false, 0, 0, 0};
-    std::map<char, Glyph_data> glyph_map;
+    glyph_data empty_data = {false, 0, 0, 0};
+    std::map<char, glyph_data> glyph_map;
 
-    Glyph_data& at(char key) {
+    glyph_data& at(char key) {
         if(glyph_map.contains(key)) return glyph_map[key];
         return empty_data;
     }
@@ -41,7 +41,7 @@ struct Font_data {
 
             for(int i = 0; i < space_glyphs; ++i) {
                 uint8_t id;
-                Glyph_data data;
+                glyph_data data;
 
                 file.read((char*)&id, 1);
                 file.read((char*)&data.stride, 1);
@@ -56,7 +56,7 @@ struct Font_data {
 
             for(int i = 0; i < visible_glyphs; ++i) {
                 uint8_t id;
-                Glyph_data data;
+                glyph_data data;
 
                 file.read((char*)&id, 1);
                 file.read((char*)&data.stride, 1);
@@ -91,7 +91,7 @@ std::string get_text_from_file(char* path) {
     file.close();
 }
 
-void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph_data& g, glm::ivec2 pos) {
+void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, glyph_data& g, glm::ivec2 pos) {
     vertices.push_back({{pos.x, pos.y}, {g.tex_coord, 0}});
     vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
     vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
@@ -146,7 +146,7 @@ struct Text {
 
         for(char c : text) {
             if(font.glyph_map.contains(c)) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
                 
                 if(g.visible) {
                     insert_char(vertices, font, size, g, {pos, 0});

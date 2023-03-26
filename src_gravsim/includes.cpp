@@ -26,3 +26,4 @@
 #define GLM_FORCE_SWIZZLE
 #include "glm\glm.hpp"
 #include "glm\gtx\matrix_transform_2d.hpp"
+#include "glm\gtx\transform.hpp"

@@ -53,7 +53,7 @@ struct Text {
     void load_buffers(Font_data& font, std::string text) {
         int pos = 0;
 
-        std::vector<Vertex> vertices;
+        std::vector<vertex> vertices;
         std::vector<glm::vec4> colors;
 
         for(char c : text) {
@@ -70,7 +70,7 @@ struct Text {
         }
 
         vertex_buf.bind();
-        vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
+        vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
@@ -184,21 +184,21 @@ enum buffer_id{b_rect, NUM_BUFFERS};
 enum shader_id{s_text_col, s_flat, NUM_SHADERS};
 enum texture_id{t_text, NUM_TEXTURES};
 
-struct Key_event {
+struct key_event {
     int key;
     int action;
 };
 
-struct Mouse_button_event {
+struct mouse_button_event {
     int button;
     int action;
 };
 
-struct Char_event {
+struct char_event {
     uint8_t c;
 };
 
-using Event = std::variant<Key_event, Mouse_button_event, Char_event>;
+using event = std::variant<key_event, mouse_button_event, char_event>;
 
 struct Gui_core {
     Font_data font = Font_data("res/text_data.bin");
@@ -209,7 +209,7 @@ struct Gui_core {
 
     std::vector<Widget> widgets;
 
-    std::vector<Event> events;
+    std::vector<event> events;
 
     void init();
 

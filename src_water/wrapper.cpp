@@ -255,7 +255,7 @@ struct Framebuffer {
         for(int i = 0; i < num_color_buffers; i++) {
             glGenTextures(1, &color_tex[i].id);
             glBindTexture(GL_TEXTURE_2D, color_tex[i].id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -264,7 +264,7 @@ struct Framebuffer {
             color_tex[i].size.x = width;
             color_tex[i].size.y = height;
             color_tex[i].num_channels = 3;
-            color_tex[i].format = GL_RGB;
+            color_tex[i].format = GL_RGBA;
         }
 
         // allocate and bind depth texture
@@ -286,6 +286,8 @@ struct Framebuffer {
             buffers[i] = GL_COLOR_ATTACHMENT0 + i;
         }
         glDrawBuffers(num_color_buffers, buffers);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
     void bind(int width, int height) {
@@ -293,12 +295,16 @@ struct Framebuffer {
         glViewport(0, 0, width, height);
     }
 
+    void bind() {
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+    }
+
     void resize(glm::ivec2 new_size) {
         bind(new_size.x, new_size.y);
 
         for(int i = 0; i < num_color_buffers; i++) {
             color_tex[i].bind();
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, new_size.x, new_size.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, new_size.x, new_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
             color_tex[i].size = new_size;
         }
 

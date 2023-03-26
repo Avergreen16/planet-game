@@ -40,7 +40,7 @@ struct Vertex {
     glm::vec2 tex_coords;
 };
 
-struct Glyph_data {
+struct glyph_data {
     bool visible;
     uint8_t stride;
     uint16_t tex_coord;
@@ -50,10 +50,10 @@ struct Glyph_data {
 struct Font_data {
     uint8_t line_height;
     uint8_t line_spacing;
-    Glyph_data empty_data = {false, 0, 0, 0};
-    std::map<char, Glyph_data> glyph_map;
+    glyph_data empty_data = {false, 0, 0, 0};
+    std::map<char, glyph_data> glyph_map;
 
-    Glyph_data& at(char key) {
+    glyph_data& at(char key) {
         if(glyph_map.contains(key)) return glyph_map[key];
         return empty_data;
     }
@@ -107,7 +107,7 @@ struct Text {
                 loc.x = 0;
                 loc.y -= font.line_spacing;
             } else {
-                Glyph_data data = font.glyph_map[c];
+                glyph_data data = font.glyph_map[c];
                 if(data.visible) {
                     if(!erase_space_counter) {
                         loc.x += space_counter * font.glyph_map[' '].stride;
@@ -391,7 +391,7 @@ int main() {
 
         for(int i = 0; i < space_glyphs; i++) {
             uint8_t id;
-            Glyph_data data;
+            glyph_data data;
 
             file.read((char*)&id, 1);
             file.read((char*)&data.stride, 1);
@@ -406,7 +406,7 @@ int main() {
 
         for(int i = 0; i < visible_glyphs; i++) {
             uint8_t id;
-            Glyph_data data;
+            glyph_data data;
 
             file.read((char*)&id, 1);
             file.read((char*)&data.stride, 1);

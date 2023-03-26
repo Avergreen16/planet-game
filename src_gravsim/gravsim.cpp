@@ -204,17 +204,33 @@ void calculate(double delta_time) {
         }
     }
 
-    if(core.selected_planetoid != -1) {
-        if(core.planetoids[core.selected_planetoid].mass != core.selected_mass) {
-            core.selected_mass = core.planetoids[core.selected_planetoid].mass;
-            std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "mass: " + std::to_string(core.selected_mass));
-        }
-    } else {
-        if(core.selected_mass != -1) {
-            core.selected_mass = -1;
-            std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "");
-        }
+    if(core.key_map[GLFW_KEY_W]) {
+        core.view_pos += core.view_dir * float(core.move_speed * delta_time);
     }
+    if(core.key_map[GLFW_KEY_S]) {
+        core.view_pos -= core.view_dir * float(core.move_speed * delta_time);
+    }
+    glm::vec3 sideways = glm::normalize(glm::cross(core.view_dir, core.up_dir));
+    if(core.key_map[GLFW_KEY_D]) {
+        core.view_pos += sideways * float(core.move_speed * delta_time);
+    }
+    if(core.key_map[GLFW_KEY_A]) {
+        core.view_pos -= sideways * float(core.move_speed * delta_time);
+    }
+    if(core.key_map[GLFW_KEY_E]) {
+        core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * (delta_time / 4000)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
+    }
+    if(core.key_map[GLFW_KEY_Q]) {
+        core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * -(delta_time / 4000)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
+    }
+    if(core.key_map[GLFW_KEY_MINUS]) {
+        core.theta -= 2 * M_PI * 0.002 * float(core.move_speed * delta_time);
+    }
+    if(core.key_map[GLFW_KEY_EQUAL]) {
+        core.theta += 2 * M_PI * 0.002 * float(core.move_speed * delta_time);
+    }
+
+    //std::cout << core.view_pos.x << " " << core.view_pos.y << "\n";
 }
 
 void Core::game_loop() {
@@ -224,18 +240,18 @@ void Core::game_loop() {
 
     calculate(delta_time);
 
-    if(planetoids.size() != num_planetoids) {
-        num_planetoids = planetoids.size();
+    if(stars.size() != num_planetoids) {
+        num_planetoids = stars.size();
 
-        std::get<1>(gui_core.widgets[0]).load_buffers(gui_core.font, "Planetoids: " + std::to_string(num_planetoids));
+        std::get<1>(gui_core.widgets[0]).load_buffers(gui_core.font, "Stars: " + to_base(num_planetoids, 16));
     }
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glm::vec4 color = {0.5, 0.0, 1.0, 1.0};
 
-    glm::mat3 view_matrix = glm::translate(glm::scale(identity_matrix, {16 * scale, 16 * scale}), glm::vec2{1, 1}) * screen_matrix * glm::translate(identity_matrix, glm::vec2{-camera_pos});
+    glm::mat3 view_matrix = glm::translate(glm::scale(identity_matrix_3, {16 * scale, 16 * scale}), glm::vec2{1, 1}) * screen_matrix * glm::translate(identity_matrix_3, glm::vec2{-camera_pos});
 
     for(int i = 0; i < planetoids.size(); i++) {
         Planetoid& p = planetoids[i];
@@ -249,7 +265,7 @@ void Core::game_loop() {
 
         p.trail_buffer.bind();
         flat_shader.use();
-        glUniformMatrix3fv(0, 1, false, &identity_matrix[0][0]);
+        glUniformMatrix3fv(0, 1, false, &identity_matrix_3[0][0]);
         glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
         glUniform4fv(2, 1, &color[0]);
         glDrawArrays(GL_LINE_STRIP, 0, p.trail_buffer.vertices);
@@ -257,14 +273,14 @@ void Core::game_loop() {
         if(p.radius * scale * 16 > 1) {
             circle_buffer.bind();
             shader_circle.use();
-            glm::mat3 transformation_matrix = glm::scale(glm::translate(identity_matrix, glm::vec2{p.position}), {p.radius, p.radius});
+            glm::mat3 transformation_matrix = glm::scale(glm::translate(identity_matrix_3, glm::vec2{p.position}), {p.radius, p.radius});
             glUniformMatrix3fv(0, 1, false, &view_matrix[0][0]);
             glUniformMatrix3fv(1, 1, false, &transformation_matrix[0][0]);
             glUniform4fv(2, 1, &color[0]);
             glDrawArrays(GL_TRIANGLES, 0, 6);
         } else {
-            glm::vec2 screen_pos = (glm::translate(glm::scale(glm::translate(identity_matrix, glm::vec2(core.viewport_size / 2)), {16 * scale, 16 * scale}), glm::vec2(-core.camera_pos)) * glm::vec3(p.position, 1.0)).xy();
-            glm::mat3 matrix = glm::translate(identity_matrix, glm::floor(screen_pos));
+            glm::vec2 screen_pos = (glm::translate(glm::scale(glm::translate(identity_matrix_3, glm::vec2(core.viewport_size / 2)), {16 * scale, 16 * scale}), glm::vec2(-core.camera_pos)) * glm::vec3(p.position, 1.0)).xy();
+            glm::mat3 matrix = glm::translate(identity_matrix_3, glm::floor(screen_pos));
             x_buffer.bind();
             flat_shader.use();
             glUniformMatrix3fv(0, 1, false, &matrix[0][0]);
@@ -274,9 +290,62 @@ void Core::game_loop() {
         }
     }
 
+    glm::mat4 view = glm::lookAt(view_pos, view_pos + view_dir, up_dir);
+    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.1p0f, 0x400000.0p0f);
+
+    /*grid_shader.use();
+    glUniformMatrix4fv(0, 1, false, &view[0][0]);
+    glUniformMatrix4fv(1, 1, false, &projection[0][0]);
+    glDrawArrays(GL_TRIANGLES, 0, 6);*/
+
+    for(Star& s : stars) {
+        point_shader.use();
+        glUniform3fv(0, 1, &s.position[0]);
+        glUniformMatrix4fv(1, 1, false, &view[0][0]);
+        glUniformMatrix4fv(2, 1, false, &projection[0][0]);
+        glUniform4fv(3, 1, &s.color[0]);
+        glDrawArrays(GL_POINTS, 0, 1);
+        
+        /*glm::vec4 new_pos_4 = projection * (view * glm::vec4(s.position, 1.0));
+        if(abs(new_pos_4.x) <= new_pos_4.w  && abs(new_pos_4.y) <= new_pos_4.w && abs(new_pos_4.z) <= new_pos_4.w) {
+            glm::vec3 new_pos = glm::vec3{new_pos_4.x, new_pos_4.y, -new_pos_4.z} / new_pos_4.w;
+            circle_buffer.bind();
+            shader_circle.use();
+            glm::mat3 transformation_matrix = glm::translate(identity_matrix_3, glm::floor(new_pos.xy() * glm::vec2(core.screen_size / 2) + glm::vec2(core.screen_size) / 2.0f));
+            glUniformMatrix3fv(0, 1, false, &screen_matrix[0][0]);
+            glUniformMatrix3fv(1, 1, false, &transformation_matrix[0][0]);
+            glUniform4fv(2, 1, &s.color[0]);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }*/
+    }
+
+    /*line_shader.use();
+    glUniformMatrix4fv(2, 1, false, &view[0][0]);
+    glUniformMatrix4fv(3, 1, false, &projection[0][0]);
+
+    glUniform4f(4, 1.0, 0.0, 0.0, 1.0);
+    glUniform3f(0, 0, 0, 0);
+    glUniform3f(1, 0x100 * cos(theta), 0x100 * sin(theta), 0);
+    glDrawArrays(GL_LINES, 0, 2);
+
+    float dist = (theta * arm_x_dist) / spiral;
+    glm::vec3 pt = {dist * cos(theta), dist * sin(theta), 0};
+    float theta_1 = theta + M_PI / 2;
+    float theta_2 = theta + atan(theta) + M_PI / 2;
+
+    glUniform4f(4, 0.0, 1.0, 0.0, 1.0);
+    glUniform3f(0, pt.x + 0x100 * cos(theta_1), pt.y + 0x100 * sin(theta_1), 0);
+    glUniform3f(1, pt.x - 0x100 * cos(theta_1), pt.y - 0x100 * sin(theta_1), 0);
+    glDrawArrays(GL_LINES, 0, 2);
+
+    glUniform4f(4, 1.0, 0.0, 1.0, 1.0);
+    glUniform3f(0, pt.x + 0x100 * cos(theta_2), pt.y + 0x100 * sin(theta_2), 0);
+    glUniform3f(1, pt.x - 0x100 * cos(theta_2), pt.y - 0x100 * sin(theta_2), 0);
+    glDrawArrays(GL_LINES, 0, 2);*/
+
     core.quadtree_buffer.bind();
     core.flat_shader.use();
-    glUniformMatrix3fv(0, 1, false, &identity_matrix[0][0]);
+    glUniformMatrix3fv(0, 1, false, &identity_matrix_3[0][0]);
     glUniformMatrix3fv(1, 1, false, &view_matrix[0][0]);
     glUniform4f(2, 1.0, 0.0, 0.0, 1.0);
     glDrawArrays(GL_LINES, 0, core.quadtree_buffer.vertices);
@@ -321,6 +390,8 @@ int main() {
     glfwSetCursorPosCallback(core.window, cursor_pos_callback);
     glfwSetScrollCallback(core.window, scroll_callback);
     glfwSetMouseButtonCallback(core.window, mouse_button_callback);
+
+    glEnable(GL_DEPTH_TEST);
 
     core.init();
 

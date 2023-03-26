@@ -6,7 +6,7 @@
 
 void Text::draw() {
     glm::vec2 translate = glm::vec2{box.position.x < 0 ? core.screen_size.x + box.position.x : box.position.x, box.position.y < 0 ? core.screen_size.y + box.position.y : box.position.y};
-    glm::mat3 trans_mat = glm::translate(identity_matrix, translate);
+    glm::mat3 trans_mat = glm::translate(identity_matrix_3, translate);
 
     core.gui_core.shaders[s_text_col].use();
 
@@ -37,38 +37,40 @@ void tb0_calc(Text_box& self) {
                 switch(a.key) {
                     case GLFW_KEY_LEFT: {
                         if(a.action == GLFW_PRESS || a.action == GLFW_REPEAT) {
-                            if(self.pos != 0) {
-                                --self.pos;
-                                self.pos_coord.x -= core.gui_core.font.glyph_map[self.str[self.pos]].stride * self.text.size;
+                            if(self.selected) {
+                                if(self.pos != 0) {
+                                    --self.pos;
+                                    self.pos_coord.x -= (((self.pos > 0) ? core.gui_core.font.glyph_map[self.str[self.pos]].advance1 : 0) + core.gui_core.font.glyph_map[self.str[self.pos]].advance2 + core.gui_core.font.glyph_map[self.str[self.pos]].tex_width) * self.text.size;
+                                }
                             }
                         }
                         break;
                     }
                     case GLFW_KEY_RIGHT: {
-                        if(a.action == GLFW_PRESS || a.action == GLFW_REPEAT) {
-                            if(self.pos != self.str.size()) {
-                                self.pos_coord.x += core.gui_core.font.glyph_map[self.str[self.pos]].stride * self.text.size;
-                                ++self.pos;
+                        if(self.selected) {
+                            if(a.action == GLFW_PRESS || a.action == GLFW_REPEAT) {
+                                if(self.pos != self.str.size()) {
+                                    self.pos_coord.x += (((self.pos > 0) ? core.gui_core.font.glyph_map[self.str[self.pos]].advance1 : 0) + core.gui_core.font.glyph_map[self.str[self.pos]].advance2 + core.gui_core.font.glyph_map[self.str[self.pos]].tex_width) * self.text.size;
+                                    ++self.pos;
+                                }
                             }
                         }
                         break;
                     }
                     case GLFW_KEY_BACKSPACE: {
                         if(a.action == GLFW_PRESS || a.action == GLFW_REPEAT) {
-                            if(self.pos != 0) {
-                                int change = core.gui_core.font.glyph_map[self.str[self.pos - 1]].stride * self.text.size;
-                                self.box.size.x -= change;
-                                self.pos_coord.x -= change;
+                            if(self.selected) {
+                                if(self.pos != 0) {
+                                    --self.pos;
+                                    int change = (((self.pos > 0) ? core.gui_core.font.glyph_map[self.str[self.pos]].advance1 : 0) + core.gui_core.font.glyph_map[self.str[self.pos]].advance2 + core.gui_core.font.glyph_map[self.str[self.pos]].tex_width) * self.text.size;
+                                    self.box.size.x -= change;
+                                    self.pos_coord.x -= change;
 
-                                --self.pos;
-                                self.str.erase(self.str.begin() + self.pos);
-                                self.update_text();
+                                    self.str.erase(self.str.begin() + self.pos);
+                                    self.update_text();
+                                }
                             }
                         }
-                        break;
-                    }
-                    case GLFW_KEY_P: {
-                        if(!self.selected) std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "Hello world!");
                         break;
                     }
                 }
@@ -89,18 +91,19 @@ void tb0_calc(Text_box& self) {
 
                             while(true) {
                                 if(loc > core.cursor_pos.x - self.text.box.position.x) {
-                                    self.pos_coord.x = prev_loc;
+                                    loc = prev_loc;
                                     --new_pos;
                                     break;
-                                } else if(new_pos > self.str.size()) {
-                                    self.pos_coord.x = loc;
-                                    --new_pos;
+                                } else if(new_pos >= self.str.size()) {
                                     break;
                                 }
                                 prev_loc = loc;
-                                loc += core.gui_core.font.glyph_map[self.str[new_pos]].stride * self.text.size;
+                                loc += (((new_pos > 0) ? core.gui_core.font.glyph_map[self.str[new_pos - 1]].advance2 + core.gui_core.font.glyph_map[self.str[new_pos]].advance1 : 0) + core.gui_core.font.glyph_map[self.str[new_pos]].tex_width) * self.text.size;
                                 ++new_pos;
                             }
+
+                            if(new_pos > 0) loc += core.gui_core.font.glyph_map[self.str[new_pos - 1]].advance2 * self.text.size;
+                            self.pos_coord.x = loc;
 
                             self.pos = std::max(new_pos, 0);
                         } else {
@@ -119,14 +122,14 @@ void tb0_calc(Text_box& self) {
                     } else {
                         c = a.c;
                     }
+                    int change = (((self.pos > 0) ? core.gui_core.font.glyph_map[c].advance1 : 0) + core.gui_core.font.glyph_map[c].advance2 + core.gui_core.font.glyph_map[c].tex_width) * self.text.size;
+                    self.box.size.x += change;
+                    self.pos_coord.x += change;
+
                     if(self.pos == self.str.size()) self.str += c;
                     else self.str.insert(self.str.begin() + self.pos, c);
                     ++self.pos; 
                     self.update_text();
-
-                    int change = core.gui_core.font.glyph_map[c].stride * self.text.size;
-                    self.box.size.x += change;
-                    self.pos_coord.x += change;
                 }
 
                 break;
@@ -140,8 +143,8 @@ void tb0_draw(Text_box& self) {
         core.gui_core.buffers[b_rect].bind();
         core.gui_core.shaders[s_flat].use();
         
-        glm::vec4 select_color = {0.0, 1.0, 0.0, 0.25};
-        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.box.position}), glm::vec2{self.box.size});
+        glm::vec4 select_color = {self.text.color.rgb(), 0.25};
+        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.box.position}), glm::vec2{self.box.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);
@@ -149,7 +152,7 @@ void tb0_draw(Text_box& self) {
 
         glDrawArrays(GL_TRIANGLES, 0, core.gui_core.buffers[b_rect].vertices);
 
-        trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.text.box.position + self.pos_coord}), glm::vec2{self.text.size, 9 * self.text.size});
+        trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.text.box.position + self.pos_coord}), glm::vec2{self.text.size, 9 * self.text.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);
@@ -160,8 +163,8 @@ void tb0_draw(Text_box& self) {
         core.gui_core.buffers[b_rect].bind();
         core.gui_core.shaders[s_flat].use();
         
-        glm::vec4 hover_color = {0.0, 1.0, 0.0, 0.125};
-        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix, glm::vec2{self.box.position}), glm::vec2{self.box.size});
+        glm::vec4 hover_color = {self.text.color.rgb(), 0.125};
+        glm::mat3 trans_mat = glm::scale(glm::translate(identity_matrix_3, glm::vec2{self.box.position}), glm::vec2{self.box.size});
 
         glUniformMatrix3fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix3fv(1, 1, false, &core.screen_matrix[0][0]);

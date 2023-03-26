@@ -111,7 +111,7 @@ struct Vertex {
     glm::vec2 tex_coords;
 };
 
-struct Glyph_data {
+struct glyph_data {
     bool visible;
     uint8_t stride;
     uint16_t tex_coord;
@@ -121,10 +121,10 @@ struct Glyph_data {
 struct Font_data {
     uint8_t line_height;
     uint8_t line_spacing;
-    Glyph_data empty_data = {false, 0, 0, 0};
-    std::map<char, Glyph_data> glyph_map;
+    glyph_data empty_data = {false, 0, 0, 0};
+    std::map<char, glyph_data> glyph_map;
 
-    Glyph_data& at(char key) {
+    glyph_data& at(char key) {
         if(glyph_map.contains(key)) return glyph_map[key];
         return empty_data;
     }
@@ -143,7 +143,7 @@ struct AABB {
     }
 };
 
-void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, Glyph_data& g, glm::ivec2 pos) {
+void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, glyph_data& g, glm::ivec2 pos) {
     vertices.push_back({{pos.x, pos.y}, {g.tex_coord, 0}});
     vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
     vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
@@ -169,7 +169,7 @@ struct Text_row {
         int pos = 0;
         for(int i = 7; i >= 0; i--) {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
+            glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             insert_char(vertices, font, size, g, {pos, 0});
             pos += g.stride * size;
@@ -181,7 +181,7 @@ struct Text_row {
 
         if(text_mode) {
             for(int i = line_num; i < line_num + bytes_num; ++i) {
-                Glyph_data g;
+                glyph_data g;
                 if(font.glyph_map.contains(bytes[i])) g = font.glyph_map[bytes[i]];
                 else g = font.glyph_map[0x88];
 
@@ -194,8 +194,8 @@ struct Text_row {
                 uint8_t byte = bytes[i];
                 uint8_t a = byte >> 4;
                 uint8_t b = byte & 0xF;
-                Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
-                Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
+                glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+                glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
                 insert_char(vertices, font, size, ga, {pos, 0});
                 pos += ga.stride * size;
@@ -206,7 +206,7 @@ struct Text_row {
         }
 
         if(bytes_num < 16) {
-            Glyph_data& g = font.glyph_map['+'];
+            glyph_data& g = font.glyph_map['+'];
 
             pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
@@ -225,7 +225,7 @@ struct Text_row {
         int pos = 0;
         for(int i = 7; i >= 0; i--) {
             uint8_t n = (line_num >> (i * 4)) & 0xF;
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
+            glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             insert_char(vertices, font, size, g, {pos, 0});
             pos += g.stride * size;
@@ -243,13 +243,13 @@ struct Text_row {
                 if(i - line_num == missing_index) {
                     if(show == 1) {
                         uint8_t a = bytes[i] >> 4;
-                        Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+                        glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
                         insert_char(vertices, font, size, ga, {pos, 0});
                     }
                     pos += (font.glyph_map['0'].stride * 2 + 5) * size;
                 } else {
-                    Glyph_data g;
+                    glyph_data g;
                     if(font.glyph_map.contains(bytes[i])) g = font.glyph_map[bytes[i]];
                     else g = font.glyph_map[0x88];
 
@@ -264,7 +264,7 @@ struct Text_row {
                 if(i - line_num == missing_index) {
                     if(show == 1) {
                         uint8_t a = bytes[i] >> 4;
-                        Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+                        glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
 
                         insert_char(vertices, font, size, ga, {pos, 0});
                     }
@@ -274,8 +274,8 @@ struct Text_row {
 
                     uint8_t a = byte >> 4;
                     uint8_t b = byte & 0xF;
-                    Glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
-                    Glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
+                    glyph_data& ga = font.glyph_map[(a < 0xA) ? 0x30 + a : ten - 10 + a];
+                    glyph_data& gb = font.glyph_map[(b < 0xA) ? 0x30 + b : ten - 10 + b];
 
                     insert_char(vertices, font, size, ga, {pos, 0});
                     pos += ga.stride * size;
@@ -287,7 +287,7 @@ struct Text_row {
         }
 
         if(bytes_num < 16 && missing_index != i) {
-            Glyph_data& g = font.glyph_map['+'];
+            glyph_data& g = font.glyph_map['+'];
 
             pos += ((font.glyph_map['0'].stride * 2 - 1) - g.tex_width) / 2 * size;
 
@@ -316,7 +316,7 @@ struct Text {
 
         for(char c : text) {
             if(font.glyph_map.contains(c)) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
                 
                 if(g.visible) {
                     insert_char(vertices, font, size, g, {pos, 0});
@@ -451,7 +451,7 @@ struct Core {
 
             for(int i = 0; i < space_glyphs; ++i) {
                 uint8_t id;
-                Glyph_data data;
+                glyph_data data;
 
                 file.read((char*)&id, 1);
                 file.read((char*)&data.stride, 1);
@@ -466,7 +466,7 @@ struct Core {
 
             for(int i = 0; i < visible_glyphs; ++i) {
                 uint8_t id;
-                Glyph_data data;
+                glyph_data data;
 
                 file.read((char*)&id, 1);
                 file.read((char*)&data.stride, 1);
@@ -549,7 +549,7 @@ struct Core {
         }
 
         for(char c : str) {
-            Glyph_data& g = font.glyph_map[c];
+            glyph_data& g = font.glyph_map[c];
 
             if(g.visible) {
                 insert_char(vertex_vec, font, text_size, g, pos);
@@ -566,7 +566,7 @@ struct Core {
         str = "uint8: " + std::to_string(tabs[active_tab].bytes[index]);
 
         for(char c : str) {
-            Glyph_data& g = font.glyph_map[c];
+            glyph_data& g = font.glyph_map[c];
 
             if(g.visible) {
                 insert_char(vertex_vec, font, text_size, g, pos);
@@ -583,7 +583,7 @@ struct Core {
         str = "int8: " + std::to_string(int8_t(tabs[active_tab].bytes[index]));
 
         for(char c : str) {
-            Glyph_data& g = font.glyph_map[c];
+            glyph_data& g = font.glyph_map[c];
 
             if(g.visible) {
                 insert_char(vertex_vec, font, text_size, g, pos);
@@ -620,7 +620,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -642,7 +642,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -664,7 +664,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -686,7 +686,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -708,7 +708,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -730,7 +730,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -755,7 +755,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -779,7 +779,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -802,7 +802,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -821,7 +821,7 @@ struct Core {
                 str += "[EOF]";
 
                 for(char c : str) {
-                    Glyph_data& g = font.glyph_map[c];
+                    glyph_data& g = font.glyph_map[c];
 
                     if(g.visible) {
                         insert_char(vertex_vec, font, text_size, g, pos);
@@ -833,7 +833,7 @@ struct Core {
                 str += 0x87;
 
                 for(char c : str) {
-                    Glyph_data& g = font.glyph_map[c];
+                    glyph_data& g = font.glyph_map[c];
 
                     if(g.visible) {
                         insert_char(vertex_vec, font, text_size, g, pos);
@@ -867,7 +867,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -889,7 +889,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -911,7 +911,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -933,7 +933,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -955,7 +955,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -977,7 +977,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -1002,7 +1002,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -1027,7 +1027,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -1050,7 +1050,7 @@ struct Core {
             }
 
             for(char c : str) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 if(g.visible) {
                     insert_char(vertex_vec, font, text_size, g, pos);
@@ -1069,7 +1069,7 @@ struct Core {
                 str += "[EOF]";
 
                 for(char c : str) {
-                    Glyph_data& g = font.glyph_map[c];
+                    glyph_data& g = font.glyph_map[c];
 
                     if(g.visible) {
                         insert_char(vertex_vec, font, text_size, g, pos);
@@ -1081,7 +1081,7 @@ struct Core {
                 str += 0x87;
 
                 for(char c : str) {
-                    Glyph_data& g = font.glyph_map[c];
+                    glyph_data& g = font.glyph_map[c];
 
                     if(g.visible) {
                         insert_char(vertex_vec, font, text_size, g, pos);
@@ -1139,7 +1139,7 @@ struct Core {
         
         int pos = 0;
         for(int n = 0; n < 0x10; n++) {
-            Glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
+            glyph_data& g = font.glyph_map[(n < 0xA) ? 0x30 + n : ten - 10 + n];
 
             insert_char(vertex_vec, font, text_size, g, {pos, 0});
 

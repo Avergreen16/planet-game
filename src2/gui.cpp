@@ -58,7 +58,7 @@ struct Text {
 
         for(char c : text) {
             if(font.glyph_map.contains(c)) {
-                Glyph_data& g = font.glyph_map[c];
+                glyph_data& g = font.glyph_map[c];
 
                 pos += g.advance1 * size;
                 

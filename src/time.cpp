@@ -13,9 +13,10 @@ struct Vertex {
 
 struct glyph_data {
     bool visible;
-    uint8_t stride;
     uint16_t tex_coord;
     uint8_t tex_width;
+    uint8_t advance1;
+    uint8_t advance2;
 };
 
 struct Font_data {
@@ -31,7 +32,7 @@ struct Font_data {
 
     void load_font_data(std::string filepath) {
         std::ifstream file;
-        file.open(filepath.data(), std::ios::in | std::ios::binary);
+        file.open(filepath, std::ios::in | std::ios::binary);
 
         if(file.is_open()) {
             file.read((char*)&line_height, 1);
@@ -45,7 +46,10 @@ struct Font_data {
                 glyph_data data;
 
                 file.read((char*)&id, 1);
-                file.read((char*)&data.stride, 1);
+                file.read((char*)&data.advance1, 1);
+                data.advance2 = 0;
+                data.tex_width = 0;
+                data.tex_coord = 0;
 
                 data.visible = false;
 
@@ -60,9 +64,10 @@ struct Font_data {
                 glyph_data data;
 
                 file.read((char*)&id, 1);
-                file.read((char*)&data.stride, 1);
                 file.read((char*)&data.tex_coord, 2);
                 file.read((char*)&data.tex_width, 1);
+                file.read((char*)&data.advance1, 1);
+                file.read((char*)&data.advance2, 1);
 
                 data.visible = true;
 
@@ -75,6 +80,15 @@ struct Font_data {
         }
     }
 };
+
+void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, glyph_data& g, glm::ivec2 pos) {
+    vertices.push_back({{pos.x, pos.y}, {g.tex_coord, 0}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
+    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
+    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
+    vertices.push_back({{pos.x + g.tex_width * size, pos.y + font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
+}
 
 std::string get_text_from_file(char* path) {
     std::ifstream file;
@@ -92,15 +106,6 @@ std::string get_text_from_file(char* path) {
     file.close();
 }
 
-void insert_char(std::vector<Vertex>& vertices, Font_data& font, int size, glyph_data& g, glm::ivec2 pos) {
-    vertices.push_back({{pos.x, pos.y}, {g.tex_coord, 0}});
-    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
-    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
-    vertices.push_back({{pos.x, pos.y + font.line_height * size}, {g.tex_coord, font.line_height}});
-    vertices.push_back({{pos.x + g.tex_width * size, pos.y}, {g.tex_coord + g.tex_width, 0}});
-    vertices.push_back({{pos.x + g.tex_width * size, pos.y + font.line_height * size}, {g.tex_coord + g.tex_width, font.line_height}});
-}
-
 struct Text {
     Buffer vertex_buf;
     glm::ivec2 size;
@@ -110,7 +115,7 @@ struct Text {
         vertex_buf.init();
     }
 
-    void load_buffers(Font_data& font, std::string text, int size) {
+    void load_buffers(Font_data& font, std::string text, int text_size) {
         int pos = 0;
 
         std::vector<Vertex> vertices;
@@ -119,19 +124,22 @@ struct Text {
         for(char c : text) {
             if(font.glyph_map.contains(c)) {
                 glyph_data& g = font.glyph_map[c];
+
+                pos += g.advance1 * text_size;
                 
                 if(g.visible) {
-                    insert_char(vertices, font, size, g, {pos, 0});
+                    insert_char(vertices, font, text_size, g, {pos, 0});
                 }
-                pos += g.stride * size;
+                pos += (g.tex_width + g.advance2) * text_size;
             }
         }
 
+        vertex_buf.bind();
         vertex_buf.set_data(vertices.data(), vertices.size(), sizeof(Vertex));
         vertex_buf.set_attrib(0, 2, sizeof(float) * 4, 0);
         vertex_buf.set_attrib(1, 2, sizeof(float) * 4, sizeof(float) * 2);
 
-        this->size = glm::ivec2{std::max(0, pos - 1 * size), font.line_height * size};
+        size = glm::ivec2{std::max(0, pos - 1 * text_size), font.line_height * text_size};
     }
 };
 

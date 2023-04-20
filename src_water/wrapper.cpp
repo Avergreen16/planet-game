@@ -4,6 +4,18 @@
 
 const glm::mat3 identity_matrix_3 = glm::identity<glm::mat3>();
 const glm::mat4 identity_matrix_4 = glm::identity<glm::mat4>();
+const glm::mat4 rot_z_4 = {
+    {1, 0, 0, 0},
+    {0, -1, 0, 0},
+    {0, 0, -1, 0},
+    {0, 0, 0, 1}
+};
+const glm::mat4 inverse_z_4 = {
+    {1, 0, 0, 0},
+    {0, 1, 0, 0},
+    {0, 0, -1, 0},
+    {0, 0, 0, 1}
+};
 
 std::string get_text_from_file(std::string path) {
     std::ifstream file;
@@ -186,6 +198,8 @@ struct Shader {
         // delete vertex/fragment shaders after compilation
         glDeleteShader(vertex_shader);
         glDeleteShader(fragment_shader);
+
+        return true;
     }
 
     void use() {
@@ -203,12 +217,9 @@ struct Texture {
     int num_channels;
     GLenum format;
 
-    bool load(const char* path) {
+    bool load(const char* path, bool mipmap = false) {
         glGenTextures(1, &id);
         glBindTexture(GL_TEXTURE_2D, id);
-        
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
         uint8_t* data = stbi_load(path, &size.x, &size.y, &num_channels, 0);
 
@@ -221,6 +232,18 @@ struct Texture {
 
             format = GL_RGBA;
 
+            if(mipmap) {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, 4);
+                //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, 4.0);
+                //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.25f);
+                glGenerateMipmap(GL_TEXTURE_2D);
+            } else {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
+
             return true;
         }
     }
@@ -232,6 +255,18 @@ struct Texture {
 
     void bind() {
         glBindTexture(GL_TEXTURE_2D, id);
+    }
+    
+    Texture() = default;
+
+    Texture(const Texture& t) = delete;
+
+    Texture(Texture&& t) {
+        id = t.id;
+        size = t.size;
+        num_channels = t.num_channels;
+        format = t.format;
+        t.id = 0;
     }
 
     ~Texture() {

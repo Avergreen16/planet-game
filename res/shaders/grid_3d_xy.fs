@@ -29,7 +29,7 @@ void main() {
             frag_color = vec4(1.0, 0.25, 0.25, 1.0);
         } else if(abs(frag_pos.x) < 0.0625) {
             frag_color = vec4(0.25, 0.25, 1.0, 1.0);
-        } else if(mod(frag_pos.x + 0.0625, 16) < 0.125 || mod(frag_pos.y + 0.0625, 16) < 0.125) {
+        } else if(mod(frag_pos.x + 0.0625, 32) < 0.125 || mod(frag_pos.y + 0.0625, 32) < 0.125) {
             frag_color = vec4(0.25, 1.0, 0.25, 1.0 - (compute_z(depth) / 128));
         } else if(fract(frag_pos.x) < 0.0625 || fract(frag_pos.y) < 0.0625) {
             frag_color = vec4(0.25, 0.25, 0.25, 1.0 - (compute_z(depth) / 64));

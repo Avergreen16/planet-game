@@ -18,6 +18,9 @@
 #include <deque>
 #include <variant>
 #include <functional>
+#include <iomanip>
+#include <thread>
+#include <mutex>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -29,4 +32,4 @@
 #include "glm\gtx\matrix_transform_2d.hpp"
 #include "glm\gtx\transform.hpp"
 
-#include "PerlinNoise.hpp"
+#include "FastNoise\FastNoise.h"

@@ -189,6 +189,7 @@ struct Shader {
         // delete vertex/fragment shaders after compilation
         glDeleteShader(vertex_shader);
         glDeleteShader(fragment_shader);
+        return true;
     }
 
     void use() {

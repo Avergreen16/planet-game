@@ -1,0 +1,1 @@
+clang++ src_water/main.cpp src/glad.c -std=c++20 -I include -L lib -l msvcrt -l user32 -l shell32 -l gdi32 -l glfw3 -l opengl32 -l FastNoise -l FastNoiseD -o bin\water.exe

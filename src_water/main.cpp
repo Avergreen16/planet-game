@@ -128,6 +128,9 @@ void calculate(double delta_time) {
                         glm::ivec3 pos;
                         if(raycast_place(core.view_pos, core.view_dir, pos, 5.0f)) {
                             uint16_t& block = get_block(pos);
+
+                            glm::ivec3 key = glm::floor((glm::vec3)pos / 32.0f);
+
                             if(block == 0) {
                                 block = 1;
                                 core.block_updates.insert(pos);
@@ -207,17 +210,17 @@ void calculate(double delta_time) {
     }
     core.chunk_allocate_thread_mutex.unlock();
 
-    glm::ivec3 new_coord = glm::round(core.view_pos);
+    glm::ivec3 new_coord = glm::floor(core.view_pos);
     if(core.current_coordinate != new_coord) {
         core.current_coordinate = new_coord;
-        std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "Coordinates: " + std::to_string((int)core.current_coordinate.x) + " " + std::to_string((int)core.current_coordinate.y) + " " + std::to_string((int)core.current_coordinate.z));
+        std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "Coordinates: " + to_hex((int)core.current_coordinate.x) + " " + to_hex((int)core.current_coordinate.y) + " " + to_hex((int)core.current_coordinate.z));
     }
 
     glm::ivec3 new_index = glm::floor(core.view_pos / 32.0f);
     if(core.current_index != new_index) {
         core.gen_queue_mutex.lock();
         core.current_index = new_index;
-        std::get<1>(core.gui_core.widgets[2]).load_buffers(core.gui_core.font, "Chunk: " + std::to_string(core.current_index.x) + " " + std::to_string(core.current_index.y) + " " + std::to_string(core.current_index.z));
+        std::get<1>(core.gui_core.widgets[2]).load_buffers(core.gui_core.font, "Chunk: " + to_hex(core.current_index.x) + " " + to_hex(core.current_index.y) + " " + to_hex(core.current_index.z));
         for(int x = -region.x; x <= region.x; ++x) {
             for(int y = -region.y; y <= region.y; ++y) {
                 for(int z = -region.z; z <= region.z; ++z) {
@@ -324,7 +327,7 @@ void calculate(double delta_time) {
     ++core.frame_count;
 
     if(core.frame_time >= 1.0) {
-        std::get<1>(core.gui_core.widgets[0]).load_buffers(core.gui_core.font, "FPS: " + std::to_string((int)(core.frame_count * (1.0 / core.frame_time))));
+        std::get<1>(core.gui_core.widgets[0]).load_buffers(core.gui_core.font, "FPS: " + to_hex((int)(core.frame_count * (1.0 / core.frame_time))));
         core.frame_count = 0;
         core.frame_time = 0.0;
     }
@@ -335,8 +338,8 @@ void calculate(double delta_time) {
 void Space_core::draw(glm::mat4 view_mat, glm::mat4 proj_mat) {
     for(Planet& p : planets) {
         float diff = (double(t - start_time) / 1000000);
-        glm::mat4 trans_mat = glm::rotate(float((M_PI * 2) * diff / p.rotation), glm::vec3(0, 0, 1));
-        trans_mat = glm::translate(p.position) * trans_mat;
+        glm::mat4 rot_mat = glm::rotate(float((M_PI * 2) * diff / p.rotation), glm::vec3(0, 0, 1));
+        glm::mat4 trans_mat = glm::translate(p.position);
 
         p.buffer.bind();
 
@@ -351,6 +354,7 @@ void Space_core::draw(glm::mat4 view_mat, glm::mat4 proj_mat) {
         glUniformMatrix4fv(0, 1, false, &trans_mat[0][0]);
         glUniformMatrix4fv(1, 1, false, &view_mat[0][0]);
         glUniformMatrix4fv(2, 1, false, &proj_mat[0][0]);
+        glUniformMatrix4fv(6, 1, false, &rot_mat[0][0]);
 
         if(p.is_star) {
             glUniform1i(5, 1);
@@ -377,7 +381,7 @@ void Core::game_loop() {
 
     glEnable(GL_DEPTH_TEST);
 
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClearColor(108.0 / 255, 132.0 / 255, 163.0 / 255, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     gui_framebuffer.bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -387,14 +391,15 @@ void Core::game_loop() {
 
 
     glm::mat4 view = glm::lookAt(view_pos, view_pos + view_dir, up_dir);
-    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.1p0f, 0x800.0p0f);
+    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.3p0f, 700.0f);
 
-    glm::mat4 rot_mat = glm::rotate(float((M_PI * 2) * (double(space_core.t - space_core.start_time) / 1000000) / space_core.planets[3].rotation), glm::vec3(0, 0, 1));
+    /*glm::mat4 rot_mat = glm::rotate(float((M_PI * 2) * (double(space_core.t - space_core.start_time) / 1000000) / space_core.planets[8].rotation), glm::vec3(0, 0, 1));
     
-    glm::vec3 surface_vec = rot_mat * glm::vec4(glm::normalize(glm::vec3(-0.5, -0.3, -0.1)) * (space_core.planets[3].radius + 0.15f), 1.0);
+    glm::vec3 surface_vec = rot_mat * glm::vec4(glm::normalize(glm::vec3(-0.5, -0.3, -0.1)) * (space_core.planets[8].radius + 0.15f), 1.0);
 
     glm::vec3 look_dir = glm::vec4(glm::normalize(cross(surface_vec, glm::vec3(0.0, 0.0, 1.0))), 1.0);
-    glm::mat4 space_view = glm::lookAt(space_core.planets[3].position + surface_vec, space_core.planets[3].position + surface_vec + look_dir, surface_vec);
+    glm::mat4 space_view = glm::lookAt(space_core.planets[8].position + surface_vec, space_core.planets[8].position + surface_vec + look_dir, surface_vec);
+    glm::mat4 space_projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.2p0f, 0x1800.0p0f);
 
     glm::vec3 rel_sun_pos = space_view * glm::vec4(space_core.planets[0].position, 1.0);
 
@@ -408,7 +413,7 @@ void Core::game_loop() {
     space_view = (glm::lookAt(glm::vec3(0, 0, 0), view_dir, up_dir) * glm::inverse(glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, 0, 1)))) * space_view;
 
     space_core.framebuffer.bind();
-    space_core.draw(space_view, projection);
+    space_core.draw(view, space_projection);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -416,13 +421,15 @@ void Core::game_loop() {
     space_core.framebuffer.color_tex[0].bind(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     screen_shader.use();
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDrawArrays(GL_TRIANGLES, 0, 6);*/
 
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     
     chunk_shader.use();
     tex.bind(0);
+
+    glm::vec3 light_dir = normalize(glm::vec3(0.0, 0.0, 1.0));
 
     chunk_allocate_thread_mutex.lock();
     for(int x = current_index.x - region.x; x <= current_index.x + region.x; ++x) {
@@ -436,7 +443,7 @@ void Core::game_loop() {
                         glUniformMatrix4fv(0, 1, false, &view[0][0]);
                         glUniformMatrix4fv(1, 1, false, &projection[0][0]);
                         glUniform3f(2, key.x, key.y, key.z);
-                        glUniform3fv(3, 1, &rel_sun_pos[0]);
+                        glUniform3fv(3, 1, &light_dir[0]);
                         glDrawArrays(GL_TRIANGLES, 0, c.buffer.vertices);
                     }
                 }
@@ -474,14 +481,14 @@ void Core::game_loop() {
     glUniform1f(2, 0x0.1p0f);
     glUniform1f(3, 0x100.0p0f);
     glDrawArrays(GL_TRIANGLES, 0, 6);*/
+    
+    glDisable(GL_DEPTH_TEST);
 
     gui_framebuffer.bind();
 
     gui_core.draw();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glDisable(GL_DEPTH_TEST);
 
     screen_shader.use();
     gui_framebuffer.color_tex[0].bind(0);
@@ -542,10 +549,10 @@ int main() {
     glfwSetMouseButtonCallback(core.window, mouse_button_callback);
 
     glEnable(GL_DEPTH_TEST);
-    //glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glPolygonMode(GL_BACK, GL_LINE);
+    //glPolygonMode(GL_BACK, GL_LINE);
 
     core.init();
 

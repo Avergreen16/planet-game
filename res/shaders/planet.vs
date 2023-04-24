@@ -9,6 +9,7 @@ layout(location = 1) uniform mat4 view_mat;
 layout(location = 2) uniform mat4 proj_mat;
 layout(location = 3) uniform vec3 light_dir;
 layout(location = 5) uniform int is_star;
+layout(location = 6) uniform mat4 rot_mat;
 
 out vec3 frag_norm;
 out vec2 frag_tex;
@@ -17,10 +18,9 @@ out float light;
 int prec = 6;
 
 void main() {
-    frag_norm = norm;
     frag_tex = tex;
     if(is_star == 1) light = 1.0;
-    else light = dot(norm, light_dir);
+    else light = dot((rot_mat * vec4(norm, 1.0)).xyz, light_dir);
     
-    gl_Position = proj_mat * view_mat * trans_mat * vec4(pos, 1.0);
+    gl_Position = proj_mat * view_mat * trans_mat * rot_mat * vec4(pos, 1.0);
 }

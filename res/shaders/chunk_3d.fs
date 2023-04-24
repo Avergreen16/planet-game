@@ -10,10 +10,11 @@ in vec2 tile_c;
 
 out vec4 frag_color;
 
-const vec2 tex_factor = vec2(1.0 / 3, 0.5);
+const vec2 tex_factor = vec2(0.25, 0.25);
 const float scale_factor = 1;
 
 void main() {
+    //frag_color = vec4(col, col, col, 1.0);
     vec2 new_tex = tex / scale_factor;
     vec2 x = dFdx(new_tex * tex_factor);
     vec2 y = dFdy(new_tex * tex_factor);
@@ -21,46 +22,5 @@ void main() {
     frag_color = textureGrad(active_texture, (frac + tile_c) * tex_factor, x, y);
     frag_color = vec4(frag_color.xyz * col, frag_color.w);
 
-    /*monoplanar
-    if(norm.z > norm.y) {
-        if(norm.z > norm.x) {
-            frag_color = texture(active_texture, p.xy);
-        } else {
-            frag_color = texture(active_texture, p.yz);
-        }
-    } else {
-        if(norm.y > norm.x) {
-            frag_color = texture(active_texture, p.xz);
-        } else {
-            frag_color = texture(active_texture, p.yz);
-        }
-    }
-
-    frag_color = vec4(frag_color.xyz * col, frag_color.w);*/
-
-    /* biplanar
-    if(norm.x < norm.y) {
-        if(norm.z < norm.x) {
-            vec2 n = norm.xy / (norm.x + norm.y);
-            frag_color = texture(active_texture, p.yz) * n.x + texture(active_texture, p.xz) * n.y;
-        } else {
-            vec2 n = norm.yz / (norm.y + norm.z);
-            frag_color = texture(active_texture, p.xz) * n.x + texture(active_texture, p.xy) * n.y;
-        }
-    } else {
-        if(norm.z < norm.y) {
-            vec2 n = norm.xy / (norm.x + norm.y);
-            frag_color = texture(active_texture, p.yz) * n.x + texture(active_texture, p.xz) * n.y;
-        } else {
-            vec2 n = norm.xz / (norm.x + norm.z);
-            frag_color = texture(active_texture, p.yz) * n.x + texture(active_texture, p.xy) * n.y;
-        }
-    }
-    frag_color = vec4(frag_color.xyz * col, frag_color.w);*/
-
-    /* triplanar
-    vec4 x_col = texture(active_texture, p.yz);
-    vec4 y_col = texture(active_texture, p.xz);
-    vec4 z_col = texture(active_texture, p.xy);
-    frag_color = vec4(((x_col * norm.x + y_col * norm.y + z_col * norm.z) * col).xyz, 1.0);*/
+    if(tex.x == 0 && tex.y == 0) frag_color = vec4(0.0, 0.0, 1.0, 1.0);
 }

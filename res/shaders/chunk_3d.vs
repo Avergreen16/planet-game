@@ -20,12 +20,10 @@ float global_light = 0.3;
 
 void main() {
     vec3 norm_light = normalize(light_dir);
-    float weight = max(dot(vec3(0, 1, 0), norm_light), 0.0);
-    col = ((dot(normal, norm_light) + 1) * 0.5 * 0.4 + 0.6) * weight + global_light * (1 - weight);
-    
-    //vec3 n = abs(normal);
-    //norm = n / (n.x + n.y + n.z);
-    //p = pos;
+    float weight = max(dot(vec3(0, 0, 1), norm_light), 0.0);
+    col = ((dot(normal, norm_light) + 1) * 0.5 * 0.65 + 0.35) * weight + global_light * (1 - weight);
+    //col = (dot(normal, vec3(0, 0, 1)) + 1) * 0.5;
+
     gl_Position = proj * (view * vec4(pos + offset * 32 + 0.5, 1.0));
 
     tex = tex_coord;

@@ -483,7 +483,7 @@ struct Space_core {
 
 const glm::ivec3 region = {12, 12, 5};
 
-const int factor = 32;
+const int factor = 48;
 const float freq = 1.0 / factor;
 
 glm::vec3 apply_matrix(glm::vec3& vec, glm::mat4& mat) {
@@ -531,6 +531,7 @@ std::unordered_map<uint16_t, glm::vec2> tile_coord = {
 struct Chunk {
     glm::ivec3 index;
     std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>> voxels = std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>>(new std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>);
+    std::unique_ptr<std::array<std::array<std::array<glm::vec3, 0x21>, 0x21>, 0x21>> surface_net = std::unique_ptr<std::array<std::array<std::array<glm::vec3, 0x21>, 0x21>, 0x21>>(new std::array<std::array<std::array<glm::vec3, 0x21>, 0x21>, 0x21>);
     Buffer buffer;
     uint8_t status = 0;
     std::vector<chunk_vertex> vertices;
@@ -800,9 +801,11 @@ void Chunk::generate() {
         for(float y = 0; y < 0x20; ++y) {
             for(float z = 0; z < 0x20; ++z) {
                 float density = result[x + y * 0x20 + z * 0x400];
-                uint16_t vox = (density * 24 + 16 - (chunk_vec.z + z) > 0.0f) ? 1 : 0;
+
+                float m = abs(chunk_vec.z + z);//-glm::length(glm::vec3(chunk_vec) + glm::vec3(x, y, z)) + 32;
+                uint16_t vox = (density * 64 + m > 0.0f) ? 1 : 0;
                 //if(vox != 0 && chunk_vec.z + z > 32) vox = 3;
-                if(vox == 0 && chunk_vec.z + z < 12) vox = 4;
+                //if(vox == 0 && 256 - m > 0.0f) vox = 4;
                 voxels_ref[x][y][z] = vox;
             }
         }
@@ -899,14 +902,14 @@ void Chunk::create_mesh() {
         }
     }
 
-    std::array<std::array<std::array<std::array<uint16_t, 32>, 32>, 32>*, 8> arr = {arr27[13], arr27[14], arr27[16], arr27[17], arr27[22], arr27[23], arr27[25], arr27[26]};
+    auto& sn = *surface_net.get();
 
-    std::array<std::array<std::array<glm::vec3, 0x21>, 0x21>, 0x21> array;
+    std::array<std::array<std::array<std::array<uint16_t, 32>, 32>, 32>*, 8> arr = {arr27[13], arr27[14], arr27[16], arr27[17], arr27[22], arr27[23], arr27[25], arr27[26]};
 
     for(int8_t x = -1; x < 0x20; ++x) {
         for(int8_t y = -1; y < 0x20; ++y) {
             for(int8_t z = -1; z < 0x20; ++z) {
-                array[x + 1][y + 1][z + 1] = get_point(get_surrounding_voxels(x, y, z, arr27)) + glm::vec3(x, y, z);
+                sn[x + 1][y + 1][z + 1] = get_point(get_surrounding_voxels(x, y, z, arr27)) + glm::vec3(x, y, z);
             }
         }
     }
@@ -925,7 +928,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[0][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[0][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[0][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x + 1][y + a.y][z + a.z], array[x + b.x + 1][y + b.y][z + b.z], array[x + c.x + 1][y + c.y][z + c.z]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x + 1][y + a.y][z + a.z], sn[x + b.x + 1][y + b.y][z + b.z], sn[x + c.x + 1][y + c.y][z + c.z]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -944,7 +947,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
                                 vertices.push_back({position, normal, tex_coord, tile_coord[voxels[1]]});
                             }   
                         }
@@ -955,7 +957,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[1][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[1][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[1][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x][y + a.y + 1][z + a.z], array[x + b.x][y + b.y + 1][z + b.z], array[x + c.x][y + c.y + 1][z + c.z]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x][y + a.y + 1][z + a.z], sn[x + b.x][y + b.y + 1][z + b.z], sn[x + c.x][y + c.y + 1][z + c.z]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -974,7 +976,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
                                 vertices.push_back({position, normal, tex_coord, tile_coord[voxels[2]]});
                             }   
                         }
@@ -985,7 +986,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[2][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[2][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[2][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x][y + a.y][z + a.z + 1], array[x + b.x][y + b.y][z + b.z + 1], array[x + c.x][y + c.y][z + c.z + 1]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x][y + a.y][z + a.z + 1], sn[x + b.x][y + b.y][z + b.z + 1], sn[x + c.x][y + c.y][z + c.z + 1]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -1012,7 +1013,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
                                 vertices.push_back({position, normal, tex_coord, tile_coord[voxels[4]]});
                             }   
                         }
@@ -1024,7 +1024,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[3][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[3][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[3][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x][y + a.y][z + a.z], array[x + b.x][y + b.y][z + b.z], array[x + c.x][y + c.y][z + c.z]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -1043,7 +1043,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
                                 vertices.push_back({position, normal, tex_coord, tile_coord[voxels[0]]});
                             }   
                         }
@@ -1054,7 +1053,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[4][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[4][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[4][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x][y + a.y][z + a.z], array[x + b.x][y + b.y][z + b.z], array[x + c.x][y + c.y][z + c.z]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -1073,7 +1072,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
                                 vertices.push_back({position, normal, tex_coord, tile_coord[voxels[0]]});
                             }   
                         }
@@ -1083,7 +1081,7 @@ void Chunk::create_mesh() {
                             glm::vec3 a = corners[triangle_table_cube[5][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[5][k * 3 + 1]];
                             glm::vec3 c = corners[triangle_table_cube[5][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver = {array[x + a.x][y + a.y][z + a.z], array[x + b.x][y + b.y][z + b.z], array[x + c.x][y + c.y][z + c.z]};
+                            std::array<glm::vec3, 3> ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
                             glm::vec3 normal = glm::normalize(glm::cross(ver[0] - ver[2], ver[1] - ver[2]));
                             
                             glm::mat4 matrix = identity_matrix_4;
@@ -1110,7 +1108,6 @@ void Chunk::create_mesh() {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = ver[l];
                                 glm::vec2 tex_coord = (matrix * glm::vec4(position, 1.0)).xy();
-                                //position -= 1.0f;
 
                                 glm::vec2 c = tile_coord[voxels[0]];
 
@@ -1796,7 +1793,7 @@ void Core::init() {
             }
         }
     }*/
-    for(uint16_t i = 0; i <= 0xFF; ++i) {
+    /*for(uint16_t i = 0; i <= 0xFF; ++i) {
         uint8_t j = 0;
 
         for(uint8_t x = 0; x < 8; ++x) {
@@ -1821,7 +1818,7 @@ void Core::init() {
             if(m != triangle_table[j].size() - 1) std::cout << ", ";
         }
         std::cout << "},\n";
-    }
+    }*/
 
     screen_matrix = glm::translate(glm::inverse(glm::scale(identity_matrix_3, glm::vec2(viewport_size / 2))), glm::vec2(-viewport_size / 2));
     gui_framebuffer.init(viewport_size.x, viewport_size.y);
@@ -1836,7 +1833,7 @@ void Core::init() {
     gui_core.init();
 
     fnfractal->SetSource(fnperlin);
-    fnfractal->SetOctaveCount(3);
+    fnfractal->SetOctaveCount(5);
 
     tex.load("res/tilex.png", true);
 
@@ -1847,4 +1844,107 @@ void Core::init() {
             chunk_load_func();
         }
     );
+}
+
+struct aabb {
+    glm::vec3 pos;
+    glm::vec3 size;
+};
+
+struct hexahedron {
+    std::array<glm::vec3, 8> vertices;
+};
+
+bool check_collisions(aabb a, hexahedron b, glm::vec3& mtv) {
+    glm::vec3 mtv_norm;
+    float mtv_dist = __FLT_MAX__;
+
+    std::vector<glm::vec3> va;
+    std::array<glm::vec3, 8>& vb = b.vertices;
+
+    for(int i = 0; i < 8; ++i) {
+        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
+        va.push_back(a.pos + a.size * iv);
+    }
+
+    std::vector<glm::vec3> axes = {
+        {1, 0, 0},
+        {0, 1, 0},
+        {0, 0, 1}
+    };
+    //std::vector<glm::vec3> axes;
+    //std::vector<glm::vec3> edges;
+
+    /*for(auto& w : triangle_table_cube) {
+        uint8_t av = w[0];
+        uint8_t bv = w[1];
+        uint8_t cv = w[2];
+
+        uint8_t dv = w[3];
+        uint8_t ev = w[4];
+        uint8_t fv = w[5];
+
+        glm::vec3 norm_abc = glm::cross(vb[av] - vb[cv], vb[bv] - vb[cv]);
+        //glm::vec3 norm_def = glm::cross(vb[dv] - vb[fv], vb[ev] - vb[fv]);
+
+        //glm::vec3 average = glm::normalize((norm_abc + norm_def) * 0.5f);
+        axes.push_back(glm::normalize(norm_abc));
+    }*/
+
+    /*edges = {
+        glm::normalize(vb[0] - vb[1]),
+        glm::normalize(vb[0] - vb[2]),
+        glm::normalize(vb[0] - vb[4]),
+        glm::normalize(vb[1] - vb[3]),
+        glm::normalize(vb[1] - vb[5]),
+        glm::normalize(vb[2] - vb[3]),
+        glm::normalize(vb[2] - vb[6]),
+        glm::normalize(vb[3] - vb[7]),
+        glm::normalize(vb[4] - vb[5]),
+        glm::normalize(vb[4] - vb[6]),
+        glm::normalize(vb[5] - vb[7]),
+        glm::normalize(vb[6] - vb[7])
+    };
+
+    for(glm::vec3 n : norms) {
+        axes.push_back(n);
+        for(glm::vec3 m : edges) {
+            axes.push_back(glm::normalize(glm::cross(n, m)));
+        }
+    }*/
+
+
+    
+    for(glm::vec3 n : axes) {
+        std::array<double, 2> minmax_a = {__DBL_MAX__, -__DBL_MAX__};
+        std::array<double, 2> minmax_b = {__DBL_MAX__, -__DBL_MAX__};
+
+        for(glm::vec3 v : va) {
+            double z = dot(v, n);
+
+            if(z < minmax_a[0]) minmax_a[0] = z;
+            else if(z > minmax_a[1]) minmax_a[1] = z;
+        }
+
+        for(glm::vec3 v : vb) {
+            double z = dot(v, n);
+
+            if(z < minmax_b[0]) minmax_b[0] = z;
+            else if(z > minmax_b[1]) minmax_b[1] = z;
+        }
+
+        if(minmax_a[0] < minmax_b[1] && minmax_a[1] > minmax_b[0]) {
+            float dist_0 = minmax_b[1] - minmax_a[0];
+            float dist_1 = minmax_b[0] - minmax_a[1];
+            float new_mtv_dist = (abs(dist_0) < abs(dist_1)) ? dist_0 : dist_1;
+            if(abs(mtv_dist) > abs(new_mtv_dist)) {
+                mtv_dist = new_mtv_dist;
+                mtv_norm = n;
+            }
+        } else {
+            return false;
+        }
+    }
+    mtv = mtv_norm * mtv_dist;
+    return true;
 }

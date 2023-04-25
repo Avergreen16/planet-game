@@ -36,6 +36,43 @@ struct time_counter {
 };
 time_counter t;
 
+aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
+
+bool collision_test() {
+    aabb camera_hitbox = hb;
+    camera_hitbox.pos += core.view_pos;
+
+    glm::vec3 center = glm::round(core.view_pos);
+
+    bool collide = false;
+
+    glm::vec3 mtv = {0, 0, 0};
+
+    for(int x = floor(camera_hitbox.pos.x); x <= ceil(camera_hitbox.pos.x + camera_hitbox.size.x); ++x) {
+        for(int y = floor(camera_hitbox.pos.y); y <= ceil(camera_hitbox.pos.y + camera_hitbox.size.y); ++y) {
+            for(int z = floor(camera_hitbox.pos.z); z <= ceil(camera_hitbox.pos.z + camera_hitbox.size.z); ++z) {
+                glm::vec3 vec = glm::vec3{x, y, z};
+                if(get_block(vec) != 0) {
+                    glm::vec3 chunk_i = glm::floor(vec / 32.0f);
+                    glm::vec3 chunk_v = chunk_i * 32.0f;
+                    glm::vec3 vox_i = vec - chunk_v;
+                    auto& sn = *core.chunks[chunk_i].surface_net.get();
+                    hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
+
+                    if(check_collisions(camera_hitbox, hex, mtv)) {
+                        std::cout << "x";
+                        core.view_pos += mtv;
+                        camera_hitbox.pos = hb.pos + core.view_pos;
+                        collide = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return collide;
+}
+
 void calculate(double delta_time) {
     for(event& e : core.gui_core.events) {
         switch(e.index()) {
@@ -201,8 +238,12 @@ void calculate(double delta_time) {
     if(core.key_map[GLFW_KEY_LEFT_SHIFT]) {
         core.view_pos -= core.up_dir * float(core.move_speed * delta_time);
     }
+
+
     
     core.chunk_allocate_thread_mutex.lock();
+    collision_test();
+
     if(raycast(core.view_pos, core.view_dir, core.selected_block, 5.0f)) {
         core.block_selected = true;
     } else {
@@ -391,7 +432,7 @@ void Core::game_loop() {
 
 
     glm::mat4 view = glm::lookAt(view_pos, view_pos + view_dir, up_dir);
-    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.3p0f, 700.0f);
+    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.18p0f, 700.0f);
 
     /*glm::mat4 rot_mat = glm::rotate(float((M_PI * 2) * (double(space_core.t - space_core.start_time) / 1000000) / space_core.planets[8].rotation), glm::vec3(0, 0, 1));
     
@@ -453,13 +494,22 @@ void Core::game_loop() {
     chunk_allocate_thread_mutex.unlock();
 
     if(block_selected) {
+        glm::vec3 fv = selected_block;
         cube_shader.use();
         glUniformMatrix4fv(0, 1, false, &view[0][0]);
         glUniformMatrix4fv(1, 1, false, &projection[0][0]);
-        glUniform3iv(2, 1, &selected_block[0]);
+        glUniform3fv(2, 1, &fv[0]);
         glUniform3f(3, 0.0f, 0.0f, 0.0f);
         glDrawArrays(GL_LINES, 0, 24);
     }
+
+    /*cube_shader.use();
+    glm::vec3 fv = view_pos - 0.5f;
+    glUniformMatrix4fv(0, 1, false, &view[0][0]);
+    glUniformMatrix4fv(1, 1, false, &projection[0][0]);
+    glUniform3fv(2, 1, &fv[0]);
+    glUniform3f(3, 1.0f, 0.0f, 0.0f);
+    glDrawArrays(GL_LINES, 0, 24);*/
 
     /*grid_shader.use();
     glUniformMatrix4fv(0, 1, false, &view[0][0]);
@@ -513,6 +563,8 @@ void calc_normals() {
 }
 
 int main() {
+    core.view_pos = {-0x17, 0xA, 1};
+
     // init glfw and set version
     if(glfwInit() == GLFW_FALSE) {
         std::cout << "ERROR: GLFW failed to load.\n";

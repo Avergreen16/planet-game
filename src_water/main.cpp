@@ -37,14 +37,26 @@ struct time_counter {
 time_counter t;
 
 aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
+hexahedron camera_hitbox;
 
 std::vector<glm::vec3> v;
 
 bool collision_test() {
     v.clear();
 
-    aabb camera_hitbox = hb;
-    camera_hitbox.pos += core.view_pos;
+    glm::mat4 view = glm::inverse(glm::lookAt(core.view_pos, core.view_pos + core.view_dir, core.up_dir));
+    glm::vec4 yv = view[1];
+    glm::vec4 zv = view[2];
+    view[1] = zv;
+    view[2] = yv;
+
+    //aabb camera_hitbox = hb;
+    //camera_hitbox.pos += core.view_pos;
+
+    for(int i = 0; i < 8; ++i) {
+        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
+        camera_hitbox.vertices[i] = /*view */ glm::vec4(hb.pos + hb.size * iv + core.view_pos, 1.0);
+    }
 
     glm::vec3 center = glm::round(core.view_pos);
 
@@ -52,9 +64,22 @@ bool collision_test() {
 
     glm::vec3 mtv = {0, 0, 0};
 
-    for(int x = floor(camera_hitbox.pos.x); x <= ceil(camera_hitbox.pos.x + camera_hitbox.size.x); ++x) {
-        for(int y = floor(camera_hitbox.pos.y); y <= ceil(camera_hitbox.pos.y + camera_hitbox.size.y); ++y) {
-            for(int z = floor(camera_hitbox.pos.z); z <= ceil(camera_hitbox.pos.z + camera_hitbox.size.z); ++z) {
+    std::array<std::array<int, 2>, 3> minmax = {
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__}
+    };
+
+    for(int i = 0; i < 3; ++i) {
+        for(glm::vec3 v : camera_hitbox.vertices) {
+            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i]));
+            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i]));
+        }
+    }
+
+    for(int x = minmax[0][0]; x <= minmax[0][1]; ++x) {
+        for(int y = minmax[1][0]; y <= minmax[1][1]; ++y) {
+            for(int z = minmax[2][0]; z <= minmax[2][1]; ++z) {
                 glm::vec3 vec = glm::vec3{x, y, z};
                 if(get_block(vec) != 0) {
                     v.push_back(vec);
@@ -66,7 +91,7 @@ bool collision_test() {
                     
                     if(check_collisions(camera_hitbox, hex, mtv)) {
                         core.view_pos += mtv;
-                        camera_hitbox.pos = hb.pos + core.view_pos;
+                        for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
                         collide = true;
                     }
                 }
@@ -414,6 +439,10 @@ void Space_core::draw(glm::mat4 view_mat, glm::mat4 proj_mat) {
     }
 }
 
+glm::vec3 multiply(glm::vec3 v, glm::mat4 m) {
+    return m * glm::vec4(v, 1.0);
+}
+
 void Core::game_loop() {
 
     glEnable(GL_DEPTH_TEST);
@@ -432,11 +461,13 @@ void Core::game_loop() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     
-
-
+    const float fov = 2 * M_PI * 0x0.4p0;
+    float near_plane = 0x0.18p0f;
+    float far_plane = 700.0f;
+    float aspect = float(screen_size.x) / screen_size.y;
 
     glm::mat4 view = glm::lookAt(view_pos, view_pos + view_dir, up_dir);
-    glm::mat4 projection = glm::perspective(float(2 * M_PI * 0x0.4p0), float(screen_size.x) / screen_size.y, 0x0.18p0f, 700.0f);
+    glm::mat4 projection = glm::perspective(fov, aspect, near_plane, far_plane);
 
     /*glm::mat4 rot_mat = glm::rotate(float((M_PI * 2) * (double(space_core.t - space_core.start_time) / 1000000) / space_core.planets[8].rotation), glm::vec3(0, 0, 1));
     
@@ -476,6 +507,14 @@ void Core::game_loop() {
 
     glm::vec3 light_dir = normalize(glm::vec3(0.0, 0.0, 1.0));
 
+    float tanhalf = tan(fov * 0.5);
+    float h_near = tanhalf * near_plane;
+    float w_near = h_near * aspect;
+    float h_far = tanhalf * far_plane;
+    float w_far = h_far * aspect;
+    glm::mat4 inverse_view = glm::inverse(view);
+    hexahedron frustum({multiply({-w_near, -h_near, -near_plane}, inverse_view), multiply({w_near, -h_near, -near_plane}, inverse_view), multiply({-w_far, -h_far, -far_plane}, inverse_view), multiply({w_far, -h_far, -far_plane}, inverse_view), multiply({-w_near, h_near, -near_plane}, inverse_view), multiply({w_near, h_near, -near_plane}, inverse_view), multiply({-w_far, h_far, -far_plane}, inverse_view), multiply({w_far, h_far, -far_plane}, inverse_view)});
+
     chunk_allocate_thread_mutex.lock();
     for(int x = current_index.x - region.x; x <= current_index.x + region.x; ++x) {
         for(int y = current_index.y - region.y; y <= current_index.y + region.y; ++y) {
@@ -484,17 +523,33 @@ void Core::game_loop() {
                 if(chunks.contains(key)) {
                     Chunk& c = chunks[key];
                     if(c.status == 2 || c.status == 3) {
-                        c.buffer.bind();
-                        glUniformMatrix4fv(0, 1, false, &view[0][0]);
-                        glUniformMatrix4fv(1, 1, false, &projection[0][0]);
-                        glUniform3f(2, key.x, key.y, key.z);
-                        glUniform3fv(3, 1, &light_dir[0]);
-                        glDrawArrays(GL_TRIANGLES, 0, c.buffer.vertices);
+                        aabb chunk_aabb(key * 0x20, {0x20, 0x20, 0x20});
+                        if(check_collisions(chunk_aabb, frustum)) {
+                            c.buffer.bind();
+                            glUniformMatrix4fv(0, 1, false, &view[0][0]);
+                            glUniformMatrix4fv(1, 1, false, &projection[0][0]);
+                            glUniform3f(2, key.x, key.y, key.z);
+                            glUniform3fv(3, 1, &light_dir[0]);
+                            glDrawArrays(GL_TRIANGLES, 0, c.buffer.vertices);
+                        }
                     }
                 }
             }
         }
     }
+
+    core.any_shader.use();
+    glUniformMatrix4fv(0, 1, false, &projection[0][0]);
+    glUniformMatrix4fv(1, 1, false, &view[0][0]);
+    glUniform3fv(2, 8, &camera_hitbox.vertices[0][0]);
+    glDrawArrays(GL_LINES, 0, 24);
+
+    /*any_shader.use();
+    glUniformMatrix4fv(0, 1, false, &projection[0][0]);
+    glUniformMatrix4fv(1, 1, false, &view[0][0]);
+    glUniform3fv(2, 8, &frustum.vertices[0][0]);
+    glDrawArrays(GL_LINES, 0, 24);*/
+
     chunk_allocate_thread_mutex.unlock();
 
     for(glm::vec3 vec3 : v) {
@@ -507,7 +562,7 @@ void Core::game_loop() {
     }
 
     /*cube_shader.use();
-    glm::vec3 fv = view_pos - 0.5f;
+    glm::vec3 fv = view_pos;
     glUniformMatrix4fv(0, 1, false, &view[0][0]);
     glUniformMatrix4fv(1, 1, false, &projection[0][0]);
     glUniform3fv(2, 1, &fv[0]);

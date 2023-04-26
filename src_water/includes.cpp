@@ -28,6 +28,7 @@
 #include "stb_image_write.h"
 
 #define GLM_FORCE_SWIZZLE
+#define GLM_FORCE_RADIANS
 #include "glm\glm.hpp"
 #include "glm\gtx\matrix_transform_2d.hpp"
 #include "glm\gtx\transform.hpp"

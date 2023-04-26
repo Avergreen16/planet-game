@@ -15,7 +15,7 @@ const float scale_factor = 1;
 
 void main() {
     //frag_color = vec4(col, col, col, 1.0);
-    vec2 new_tex = tex / scale_factor;
+    vec2 new_tex = (tex + 0.5) / scale_factor;
     vec2 x = dFdx(new_tex * tex_factor);
     vec2 y = dFdy(new_tex * tex_factor);
     vec2 frac = fract(new_tex);

@@ -3,24 +3,29 @@
 const std::array<const glm::vec3, 8> corners = {
     glm::vec3{0, 0, 0},
     glm::vec3{1, 0, 0},
-    glm::vec3{1, 0, 1},
-    glm::vec3{0, 0, 1},
     glm::vec3{0, 1, 0},
     glm::vec3{1, 1, 0},
-    glm::vec3{1, 1, 1},
-    glm::vec3{0, 1, 1}
+    glm::vec3{0, 0, 1},
+    glm::vec3{1, 0, 1},
+    glm::vec3{0, 1, 1},
+    glm::vec3{1, 1, 1}
 };
 
 std::array<std::vector<uint8_t>, 6> triangle_table_cube = {
-    std::vector<uint8_t>{4, 0, 3, 4, 3, 7},
-    std::vector<uint8_t>{0, 1, 2, 0, 2, 3},
-    std::vector<uint8_t>{4, 5, 1, 4, 1, 0},
-    std::vector<uint8_t>{1, 5, 6, 1, 6, 2},
-    std::vector<uint8_t>{5, 4, 7, 5, 7, 6},
-    std::vector<uint8_t>{3, 2, 6, 3, 6, 7}
+    std::vector<uint8_t>{2, 0, 4, 2, 4, 6},
+    std::vector<uint8_t>{0, 1, 5, 0, 5, 4},
+    std::vector<uint8_t>{2, 3, 1, 2, 1, 0},
+    std::vector<uint8_t>{1, 3, 7, 1, 7, 5},
+    std::vector<uint8_t>{3, 2, 6, 3, 6, 7},
+    std::vector<uint8_t>{4, 5, 7, 4, 7, 6}
 };
 
 /*
+
+  6   7
+4   5
+  2   3
+0   1
 
   7   6
 3   2
@@ -28,6 +33,9 @@ std::array<std::vector<uint8_t>, 6> triangle_table_cube = {
 0   1
 
 */
+
+
+//{0, 1, 1, 5, 4, 5, 0, 4, 2, 3, 3, 7, 6, 7, 2, 6, 0, 2, 1, 3, 4, 6, 5, 7}
 
 
 const std::array<const glm::vec3, 12> midpoint_vertices = {

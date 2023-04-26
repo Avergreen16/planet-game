@@ -481,7 +481,7 @@ struct Space_core {
     void draw(glm::mat4 view_mat, glm::mat4 proj_mat);
 };
 
-const glm::ivec3 region = {12, 12, 5};
+const glm::ivec3 region = {4, 4, 4};
 
 const int factor = 48;
 const float freq = 1.0 / factor;
@@ -524,8 +524,12 @@ glm::ivec3 mod(glm::ivec3 x, int y) {
 std::unordered_map<uint16_t, glm::vec2> tile_coord = {
     {1, {0, 1}},
     {2, {1, 1}},
-    {3, {1, 0}},
-    {4, {2, 1}}
+    {3, {2, 1}},
+    {4, {3, 1}},
+    {5, {0, 2}},
+    {6, {1, 2}},
+    {7, {2, 2}},
+    {8, {3, 2}}
 };
 
 struct Chunk {
@@ -797,13 +801,15 @@ void Chunk::generate() {
 
     auto& voxels_ref = (*voxels.get());
 
+    uint16_t id = rand() % 8 + 1;
+
     for(float x = 0; x < 0x20; ++x) {
         for(float y = 0; y < 0x20; ++y) {
             for(float z = 0; z < 0x20; ++z) {
                 float density = result[x + y * 0x20 + z * 0x400];
 
-                float m = abs(chunk_vec.z + z);//-glm::length(glm::vec3(chunk_vec) + glm::vec3(x, y, z)) + 32;
-                uint16_t vox = (density * 64 + m > 0.0f) ? 1 : 0;
+                float m = -(chunk_vec.z + z);//-glm::length(glm::vec3(chunk_vec) + glm::vec3(x, y, z)) + 32;
+                uint16_t vox = (density * 16 > 0.0f) ? id : 0;
                 //if(vox != 0 && chunk_vec.z + z > 32) vox = 3;
                 //if(vox == 0 && 256 - m > 0.0f) vox = 4;
                 voxels_ref[x][y][z] = vox;
@@ -923,7 +929,6 @@ void Chunk::create_mesh() {
 
                 if(voxels[0] == 0) {
                     if(voxels[1] != 0) {
-                        if(voxels[1] > 4) std::cout << voxels[1] << "\n";
                         for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                             glm::vec3 a = corners[triangle_table_cube[0][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[0][k * 3 + 1]];
@@ -952,7 +957,6 @@ void Chunk::create_mesh() {
                         }
                     }
                     if(voxels[2] != 0) {
-                        if(voxels[2] > 4) std::cout << voxels[2] << "\n";
                         for(int k = 0; k < triangle_table_cube[1].size() / 3; ++k) {
                             glm::vec3 a = corners[triangle_table_cube[1][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[1][k * 3 + 1]];
@@ -981,7 +985,6 @@ void Chunk::create_mesh() {
                         }
                     }
                     if(voxels[4] != 0) {
-                        if(voxels[4] > 4) std::cout << voxels[4] << "\n";
                         for(int k = 0; k < triangle_table_cube[2].size() / 3; ++k) {
                             glm::vec3 a = corners[triangle_table_cube[2][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[2][k * 3 + 1]];
@@ -1019,7 +1022,6 @@ void Chunk::create_mesh() {
                     }
                 } else {
                     if(voxels[1] == 0) {
-                        if(voxels[0] > 4) std::cout << voxels[0] << "\n";
                         for(int k = 0; k < triangle_table_cube[3].size() / 3; ++k) {
                             glm::vec3 a = corners[triangle_table_cube[3][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[3][k * 3 + 1]];
@@ -1048,7 +1050,6 @@ void Chunk::create_mesh() {
                         }
                     }
                     if(voxels[2] == 0) {
-                        if(voxels[0] > 4) std::cout << voxels[0] << "\n";
                         for(int k = 0; k < triangle_table_cube[4].size() / 3; ++k) {
                             glm::vec3 a = corners[triangle_table_cube[4][k * 3 + 0]];
                             glm::vec3 b = corners[triangle_table_cube[4][k * 3 + 1]];
@@ -1867,15 +1868,15 @@ bool check_collisions(aabb a, hexahedron b, glm::vec3& mtv) {
         va.push_back(a.pos + a.size * iv);
     }
 
-    std::vector<glm::vec3> axes = {
+    std::vector<glm::vec3> norms = {
         {1, 0, 0},
         {0, 1, 0},
         {0, 0, 1}
     };
-    //std::vector<glm::vec3> axes;
-    //std::vector<glm::vec3> edges;
+    std::vector<glm::vec3> axes;
+    std::vector<glm::vec3> edges;
 
-    /*for(auto& w : triangle_table_cube) {
+    for(auto& w : triangle_table_cube) {
         uint8_t av = w[0];
         uint8_t bv = w[1];
         uint8_t cv = w[2];
@@ -1884,14 +1885,15 @@ bool check_collisions(aabb a, hexahedron b, glm::vec3& mtv) {
         uint8_t ev = w[4];
         uint8_t fv = w[5];
 
-        glm::vec3 norm_abc = glm::cross(vb[av] - vb[cv], vb[bv] - vb[cv]);
-        //glm::vec3 norm_def = glm::cross(vb[dv] - vb[fv], vb[ev] - vb[fv]);
+        glm::vec3 norm_abc = glm::cross(vb[bv] - vb[av], vb[cv] - vb[av]);
+        glm::vec3 norm_def = glm::cross(vb[ev] - vb[dv], vb[cv] - vb[dv]);
 
-        //glm::vec3 average = glm::normalize((norm_abc + norm_def) * 0.5f);
-        axes.push_back(glm::normalize(norm_abc));
-    }*/
+        glm::vec3 average = glm::normalize(norm_abc + norm_def);
 
-    /*edges = {
+        axes.push_back(average);
+    }
+
+    edges = {
         glm::normalize(vb[0] - vb[1]),
         glm::normalize(vb[0] - vb[2]),
         glm::normalize(vb[0] - vb[4]),
@@ -1909,9 +1911,10 @@ bool check_collisions(aabb a, hexahedron b, glm::vec3& mtv) {
     for(glm::vec3 n : norms) {
         axes.push_back(n);
         for(glm::vec3 m : edges) {
-            axes.push_back(glm::normalize(glm::cross(n, m)));
+            glm::vec3 cross = glm::normalize(glm::cross(n, m));
+            if(!glm::isnan(cross.x)) axes.push_back(cross);
         }
-    }*/
+    }
 
 
     
@@ -1942,6 +1945,7 @@ bool check_collisions(aabb a, hexahedron b, glm::vec3& mtv) {
                 mtv_norm = n;
             }
         } else {
+            if(glm::isnan(n.x)) std::cout << "nan ";
             return false;
         }
     }

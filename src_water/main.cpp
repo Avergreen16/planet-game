@@ -38,7 +38,11 @@ time_counter t;
 
 aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
 
+std::vector<glm::vec3> v;
+
 bool collision_test() {
+    v.clear();
+
     aabb camera_hitbox = hb;
     camera_hitbox.pos += core.view_pos;
 
@@ -53,14 +57,14 @@ bool collision_test() {
             for(int z = floor(camera_hitbox.pos.z); z <= ceil(camera_hitbox.pos.z + camera_hitbox.size.z); ++z) {
                 glm::vec3 vec = glm::vec3{x, y, z};
                 if(get_block(vec) != 0) {
+                    v.push_back(vec);
                     glm::vec3 chunk_i = glm::floor(vec / 32.0f);
                     glm::vec3 chunk_v = chunk_i * 32.0f;
                     glm::vec3 vox_i = vec - chunk_v;
                     auto& sn = *core.chunks[chunk_i].surface_net.get();
                     hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
-
+                    
                     if(check_collisions(camera_hitbox, hex, mtv)) {
-                        std::cout << "x";
                         core.view_pos += mtv;
                         camera_hitbox.pos = hb.pos + core.view_pos;
                         collide = true;
@@ -493,13 +497,12 @@ void Core::game_loop() {
     }
     chunk_allocate_thread_mutex.unlock();
 
-    if(block_selected) {
-        glm::vec3 fv = selected_block;
+    for(glm::vec3 vec3 : v) {
         cube_shader.use();
         glUniformMatrix4fv(0, 1, false, &view[0][0]);
         glUniformMatrix4fv(1, 1, false, &projection[0][0]);
-        glUniform3fv(2, 1, &fv[0]);
-        glUniform3f(3, 0.0f, 0.0f, 0.0f);
+        glUniform3fv(2, 1, &vec3[0]);
+        glUniform3f(3, 1.0f, 0.0f, 0.0f);
         glDrawArrays(GL_LINES, 0, 24);
     }
 

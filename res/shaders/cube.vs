@@ -11,5 +11,5 @@ layout(location = 1) uniform mat4 proj;
 layout(location = 2) uniform vec3 pos;
 
 void main() {
-    gl_Position = proj * (view * vec4(vertices[gl_VertexID].xyz + vec3(0.5, 0.5, 0.5) + pos, 1.0));
+    gl_Position = proj * (view * vec4(vertices[gl_VertexID].xyz + pos, 1.0));
 }

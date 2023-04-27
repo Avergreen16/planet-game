@@ -37,6 +37,7 @@ struct time_counter {
 time_counter t;
 
 aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
+//aabb hb = {glm::vec3(-1, -1, -1.375), glm::vec3(2)};
 hexahedron camera_hitbox;
 
 std::vector<glm::vec3> v;
@@ -103,6 +104,8 @@ bool collision_test() {
 }
 
 void calculate(double delta_time) {
+    bool jump = false;
+
     for(event& e : core.gui_core.events) {
         switch(e.index()) {
             case 0: {
@@ -142,6 +145,10 @@ void calculate(double delta_time) {
                 } else if(k.key == GLFW_KEY_EQUAL) {
                     if(k.action == GLFW_PRESS) {
                         core.space_core.sim_active = !core.space_core.sim_active;
+                    }
+                } else if(k.key == GLFW_KEY_SPACE) {
+                    if(k.action == GLFW_PRESS) {
+                        jump = true;
                     }
                 }
                 break;
@@ -242,36 +249,40 @@ void calculate(double delta_time) {
         }
     }
 
-    if(core.key_map[GLFW_KEY_E]) {
+    /*if(core.key_map[GLFW_KEY_E]) {
         core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * (delta_time / 3)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
     }
     if(core.key_map[GLFW_KEY_Q]) {
         core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * -(delta_time / 3)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
-    }
+    }*/
     if(core.key_map[GLFW_KEY_W]) {
-        core.view_pos += core.view_dir * float(core.move_speed * delta_time);
+        core.view_pos += glm::vec3(glm::normalize(core.view_dir.xy()) * float(core.move_speed * delta_time), 0.0);
     }
     if(core.key_map[GLFW_KEY_S]) {
-        core.view_pos -= core.view_dir * float(core.move_speed * delta_time);
+        core.view_pos -= glm::vec3(glm::normalize(core.view_dir.xy()) * float(core.move_speed * delta_time), 0.0);
     }
     glm::vec3 sideways = glm::normalize(glm::cross(core.view_dir, core.up_dir));
     if(core.key_map[GLFW_KEY_D]) {
-        core.view_pos += sideways * float(core.move_speed * delta_time);
+        core.view_pos += glm::vec3(glm::normalize(sideways.xy()) * float(core.move_speed * delta_time), 0.0);
     }
     if(core.key_map[GLFW_KEY_A]) {
-        core.view_pos -= sideways * float(core.move_speed * delta_time);
+        core.view_pos -= glm::vec3(glm::normalize(sideways.xy()) * float(core.move_speed * delta_time), 0.0);
     }
-    if(core.key_map[GLFW_KEY_SPACE]) {
-        core.view_pos += core.up_dir * float(core.move_speed * delta_time);  
-    }
-    if(core.key_map[GLFW_KEY_LEFT_SHIFT]) {
+    /*if(core.key_map[GLFW_KEY_LEFT_SHIFT]) {
         core.view_pos -= core.up_dir * float(core.move_speed * delta_time);
-    }
+    }*/
 
-
+    core.vel += core.accel * float(delta_time);
+    core.view_pos += core.vel * float(delta_time);
     
     core.chunk_allocate_thread_mutex.lock();
-    collision_test();
+    if(collision_test()) {
+        if(jump) {
+            core.vel.z = 5;
+        } else {
+            core.vel.z = 0;
+        }
+    };
 
     if(raycast(core.view_pos, core.view_dir, core.selected_block, 5.0f)) {
         core.block_selected = true;
@@ -523,7 +534,7 @@ void Core::game_loop() {
                 if(chunks.contains(key)) {
                     Chunk& c = chunks[key];
                     if(c.status == 2 || c.status == 3) {
-                        aabb chunk_aabb(key * 0x20, {0x20, 0x20, 0x20});
+                        aabb chunk_aabb(glm::vec3(key * 0x20) - 1.0f, {0x21, 0x21, 0x21});
                         if(check_collisions(chunk_aabb, frustum)) {
                             c.buffer.bind();
                             glUniformMatrix4fv(0, 1, false, &view[0][0]);

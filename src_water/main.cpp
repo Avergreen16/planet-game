@@ -36,16 +36,48 @@ struct time_counter {
 };
 time_counter t;
 
-aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
-//aabb hb = {glm::vec3(-1, -1, -1.375), glm::vec3(2)};
-hexahedron camera_hitbox;
-
 std::vector<glm::vec3> v;
 
+aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
+hexahedron camera_hitbox;
+
+glm::vec3 pos = glm::vec3(-0x17, 0x10, 0);
+glm::vec3 vel = {0, 0, 0};
+aabb box = {glm::vec3(-0.5), glm::vec3(1.0)};
+hexahedron box_hitbox;
+
+
+float bounce = 0.0f;
+float friction = 0.5f;
+
+struct col_queue_compare {
+    bool operator()(const glm::vec3& a, const glm::vec3& b) const {
+        glm::vec3 diff_a = a - core.view_pos;
+        glm::vec3 diff_b = b - core.view_pos;
+        float sum_a = abs(diff_a.x) + abs(diff_a.y) + abs(diff_a.z);
+        float sum_b = abs(diff_b.x) + abs(diff_b.y) + abs(diff_b.z);
+        return sum_a > sum_b;
+    }
+};
+
+struct col_queue_compare1 {
+    bool operator()(const glm::vec3& a, const glm::vec3& b) const {
+        glm::vec3 diff_a = a - pos;
+        glm::vec3 diff_b = b - pos;
+        float sum_a = abs(diff_a.x) + abs(diff_a.y) + abs(diff_a.z);
+        float sum_b = abs(diff_b.x) + abs(diff_b.y) + abs(diff_b.z);
+        return sum_a > sum_b;
+    }
+};
+
+std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare> collision_queue;
+std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare1> collision_queue_box;
+
 bool collision_test() {
+    collision_queue = std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare>();
     v.clear();
 
-    glm::mat4 view = glm::inverse(glm::lookAt(core.view_pos, core.view_pos + core.view_dir, core.up_dir));
+    glm::mat4 view = glm::inverse(glm::lookAt({0, 0, 0}, core.view_dir, core.up_dir));
     glm::vec4 yv = view[1];
     glm::vec4 zv = view[2];
     view[1] = zv;
@@ -58,8 +90,6 @@ bool collision_test() {
         glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
         camera_hitbox.vertices[i] = /*view */ glm::vec4(hb.pos + hb.size * iv + core.view_pos, 1.0);
     }
-
-    glm::vec3 center = glm::round(core.view_pos);
 
     bool collide = false;
 
@@ -81,27 +111,135 @@ bool collision_test() {
     for(int x = minmax[0][0]; x <= minmax[0][1]; ++x) {
         for(int y = minmax[1][0]; y <= minmax[1][1]; ++y) {
             for(int z = minmax[2][0]; z <= minmax[2][1]; ++z) {
-                glm::vec3 vec = glm::vec3{x, y, z};
-                if(get_block(vec) != 0) {
-                    v.push_back(vec);
-                    glm::vec3 chunk_i = glm::floor(vec / 32.0f);
-                    glm::vec3 chunk_v = chunk_i * 32.0f;
-                    glm::vec3 vox_i = vec - chunk_v;
-                    auto& sn = *core.chunks[chunk_i].surface_net.get();
-                    hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
-                    
-                    if(check_collisions(camera_hitbox, hex, mtv)) {
-                        core.view_pos += mtv;
-                        for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
-                        collide = true;
-                    }
-                }
+                collision_queue.push(glm::vec3{x, y, z});
             }
         }
     }
 
+    while(collision_queue.size() != 0) {
+        glm::vec3 vec = collision_queue.top();
+        collision_queue.pop();
+        if(get_block(vec) != 0) {
+            v.push_back(vec);
+            glm::vec3 chunk_i = glm::floor(vec / 32.0f);
+            glm::vec3 chunk_v = chunk_i * 32.0f;
+            glm::vec3 vox_i = vec - chunk_v;
+            auto& sn = *core.chunks[chunk_i].surface_net.get();
+            hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
+            
+            if(check_collisions(camera_hitbox, hex, mtv)) {
+                glm::vec3 impact_vel = core.vel;
+                glm::vec3 collision_normal = glm::normalize(mtv);
+                
+                glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
+                glm::vec3 tangent = impact_vel - penetration;
+
+                float r = 1 + bounce;
+                float f = friction;
+
+                float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
+
+                core.vel -= penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb)) ? f : coulomb));
+
+                core.view_pos += mtv;
+                for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+                collide = true;
+            }
+        }
+    }
+
+
+
+
+
+
+    collision_queue_box = std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare1>();
+
+    for(int i = 0; i < 8; ++i) {
+        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
+        box_hitbox.vertices[i] = glm::vec4(box.pos + box.size * iv + pos, 1.0);
+    }
+
+    glm::vec3 center = glm::round(core.view_pos);
+
+    minmax = {
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__}
+    };
+
+    for(int i = 0; i < 3; ++i) {
+        for(glm::vec3 v : box_hitbox.vertices) {
+            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i]));
+            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i]));
+        }
+    }
+
+    for(int x = minmax[0][0]; x <= minmax[0][1]; ++x) {
+        for(int y = minmax[1][0]; y <= minmax[1][1]; ++y) {
+            for(int z = minmax[2][0]; z <= minmax[2][1]; ++z) {
+                collision_queue_box.push(glm::vec3{x, y, z});
+            }
+        }
+    }
+
+    while(collision_queue_box.size() != 0) {
+        glm::vec3 vec = collision_queue_box.top();
+        collision_queue_box.pop();
+        if(get_block(vec) != 0) {
+            v.push_back(vec);
+            glm::vec3 chunk_i = glm::floor(vec / 32.0f);
+            glm::vec3 chunk_v = chunk_i * 32.0f;
+            glm::vec3 vox_i = vec - chunk_v;
+            auto& sn = *core.chunks[chunk_i].surface_net.get();
+            hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
+            
+            if(check_collisions(box_hitbox, hex, mtv)) {
+                glm::vec3 impact_vel = vel;
+                glm::vec3 collision_normal = glm::normalize(mtv);
+                
+                glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
+                glm::vec3 tangent = impact_vel - penetration;
+
+                float r = 1 + bounce;
+                float f = friction;
+
+                float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
+
+                vel -= penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb)) ? f : coulomb));
+
+                pos += mtv;
+                for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+            }
+        }
+    }
+
+    
+    if(check_collisions(box_hitbox, camera_hitbox, mtv)) {
+        glm::vec3 impact_vel = vel - core.vel;
+        glm::vec3 collision_normal = glm::normalize(mtv);
+        
+        glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
+        glm::vec3 tangent = impact_vel - penetration;
+
+        float r = 1 + bounce;
+        float f = friction;
+
+        float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
+
+        glm::vec3 new_vel = penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb) || glm::isnan(coulomb)) ? f : coulomb));
+        vel -= new_vel * 0.5f;
+        core.vel += new_vel * 0.5f;
+
+        pos += mtv * 0.5f;
+        core.view_pos -= mtv * 0.5f;
+        for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+    }
+
     return collide;
 }
+
+float coyote_time = 0.0f;
 
 void calculate(double delta_time) {
     bool jump = false;
@@ -274,15 +412,21 @@ void calculate(double delta_time) {
 
     core.vel += core.accel * float(delta_time);
     core.view_pos += core.vel * float(delta_time);
+
+    vel += core.accel * float(delta_time);
+    pos += vel * float(delta_time);
     
     core.chunk_allocate_thread_mutex.lock();
+
     if(collision_test()) {
-        if(jump) {
-            core.vel.z = 5;
-        } else {
-            core.vel.z = 0;
-        }
-    };
+        coyote_time = 0.0f;
+    } else {
+        coyote_time += delta_time;
+    }
+
+    if(jump && coyote_time < 0.125f) {
+        core.vel.z += 6;
+    }
 
     if(raycast(core.view_pos, core.view_dir, core.selected_block, 5.0f)) {
         core.block_selected = true;
@@ -553,6 +697,12 @@ void Core::game_loop() {
     glUniformMatrix4fv(0, 1, false, &projection[0][0]);
     glUniformMatrix4fv(1, 1, false, &view[0][0]);
     glUniform3fv(2, 8, &camera_hitbox.vertices[0][0]);
+    glDrawArrays(GL_LINES, 0, 24);
+
+    core.any_shader.use();
+    glUniformMatrix4fv(0, 1, false, &projection[0][0]);
+    glUniformMatrix4fv(1, 1, false, &view[0][0]);
+    glUniform3fv(2, 8, &box_hitbox.vertices[0][0]);
     glDrawArrays(GL_LINES, 0, 24);
 
     /*any_shader.use();

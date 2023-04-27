@@ -575,7 +575,8 @@ struct Core {
     double move_speed = 8;
     uint8_t dir_enum = NUL;
 
-    glm::vec3 accel = {0, 0, -10};
+    float gravity = -10;
+    glm::vec3 accel = {0, 0, gravity};
     glm::vec3 vel = {0, 0, 0};
 
     Shader grid_shader;

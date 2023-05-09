@@ -11,11 +11,11 @@ in vec2 tile_c;
 out vec4 frag_color;
 
 const vec2 tex_factor = vec2(0.25, 0.25);
-const float scale_factor = 1;
+const float scale_factor = 2;
 
 void main() {
     //frag_color = vec4(col, col, col, 1.0);
-    vec2 new_tex = (tex + 0.5) / scale_factor;
+    vec2 new_tex = tex * scale_factor;
     vec2 x = dFdx(new_tex * tex_factor);
     vec2 y = dFdy(new_tex * tex_factor);
     vec2 frac = fract(new_tex);

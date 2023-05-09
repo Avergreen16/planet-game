@@ -87,6 +87,8 @@
         "bitset": "cpp",
         "variant": "cpp",
         "unordered_set": "cpp",
-        "condition_variable": "cpp"
+        "condition_variable": "cpp",
+        "ranges": "cpp",
+        "span": "cpp"
     }
 }

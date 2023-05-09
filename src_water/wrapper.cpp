@@ -235,7 +235,7 @@ struct Texture {
             if(mipmap) {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, 4);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, 3);
                 //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, 4.0);
                 //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.25f);
                 glGenerateMipmap(GL_TEXTURE_2D);

@@ -38,22 +38,24 @@ time_counter t;
 
 std::vector<glm::vec3> v;
 
-aabb hb = {glm::vec3(-0.375, -0.375, -1.375), glm::vec3(0.75, 0.75, 1.75)};
+aabb hb = {glm::vec3(-0.375, -0.375, -1.375) * 0.5f, glm::vec3(0.75, 0.75, 1.75) * 0.5f};
 hexahedron camera_hitbox;
 
-glm::vec3 pos = glm::vec3(-0x17, 0x10, 0);
+glm::vec3 pos = glm::vec3(-9, 4, 5);
 glm::vec3 vel = {0, 0, 0};
-aabb box = {glm::vec3(-0.5), glm::vec3(1.0)};
+aabb box = {glm::vec3(-0.375, -0.375, -1.0), glm::vec3(0.75, 0.75, 1.75)};
 hexahedron box_hitbox;
 
+bool is_collision = false;
+glm::vec3 collision;
 
 float bounce = 0.0f;
 float friction = 0.5f;
 
 struct col_queue_compare {
     bool operator()(const glm::vec3& a, const glm::vec3& b) const {
-        glm::vec3 diff_a = a - core.view_pos;
-        glm::vec3 diff_b = b - core.view_pos;
+        glm::vec3 diff_a = a * 0.5f - core.view_pos;
+        glm::vec3 diff_b = b * 0.5f - core.view_pos;
         float sum_a = abs(diff_a.x) + abs(diff_a.y) + abs(diff_a.z);
         float sum_b = abs(diff_b.x) + abs(diff_b.y) + abs(diff_b.z);
         return sum_a > sum_b;
@@ -62,8 +64,8 @@ struct col_queue_compare {
 
 struct col_queue_compare1 {
     bool operator()(const glm::vec3& a, const glm::vec3& b) const {
-        glm::vec3 diff_a = a - pos;
-        glm::vec3 diff_b = b - pos;
+        glm::vec3 diff_a = a * 0.5f - pos;
+        glm::vec3 diff_b = b * 0.5f - pos;
         float sum_a = abs(diff_a.x) + abs(diff_a.y) + abs(diff_a.z);
         float sum_b = abs(diff_b.x) + abs(diff_b.y) + abs(diff_b.z);
         return sum_a > sum_b;
@@ -74,6 +76,39 @@ std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare> collis
 std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare1> collision_queue_box;
 
 bool collision_test() {
+    glm::vec3 mtv = {0, 0, 0};
+
+    for(int i = 0; i < 8; ++i) {
+        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
+        camera_hitbox.vertices[i] = /*view */ glm::vec4(hb.pos + hb.size * iv + core.view_pos, 1.0);
+    }
+
+    for(int i = 0; i < 8; ++i) {
+        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
+        box_hitbox.vertices[i] = glm::vec4(box.pos + box.size * iv + pos, 1.0);
+    }
+
+    if(check_collisions(box_hitbox, camera_hitbox, mtv, collision)) {
+        glm::vec3 impact_vel = vel - core.vel;
+        glm::vec3 collision_normal = glm::normalize(mtv);
+        
+        glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
+        glm::vec3 tangent = impact_vel - penetration;
+
+        float r = 1 + bounce;
+        float f = friction;
+
+        float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
+
+        glm::vec3 new_vel = penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb) || glm::isnan(coulomb)) ? f : coulomb));
+        vel -= new_vel * 0.5f;
+        core.vel += new_vel * 0.5f;
+
+        pos += mtv * 0.5f;
+        core.view_pos -= mtv * 0.5f;
+        for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+    }
+
     collision_queue = std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare>();
     v.clear();
 
@@ -86,16 +121,10 @@ bool collision_test() {
     //aabb camera_hitbox = hb;
     //camera_hitbox.pos += core.view_pos;
 
-    for(int i = 0; i < 8; ++i) {
-        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
-        camera_hitbox.vertices[i] = /*view */ glm::vec4(hb.pos + hb.size * iv + core.view_pos, 1.0);
-    }
-
     bool collide = false;
 
-    glm::vec3 mtv = {0, 0, 0};
-
-    std::array<std::array<int, 2>, 3> minmax = {
+    std::array<std::array<int, 2>, 3> minmax;
+    /* = {
         std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
         std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
         std::array<int, 2>{__INT_MAX__, -__INT_MAX__}
@@ -103,8 +132,8 @@ bool collision_test() {
 
     for(int i = 0; i < 3; ++i) {
         for(glm::vec3 v : camera_hitbox.vertices) {
-            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i]));
-            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i]));
+            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i] - 0.5f));
+            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i] - 0.5f));
         }
     }
 
@@ -119,10 +148,10 @@ bool collision_test() {
     while(collision_queue.size() != 0) {
         glm::vec3 vec = collision_queue.top();
         collision_queue.pop();
-        if(get_block(vec) != 0) {
+        if(get_terrain_voxel(vec) != 0) {
             v.push_back(vec);
-            glm::vec3 chunk_i = glm::floor(vec / 32.0f);
-            glm::vec3 chunk_v = chunk_i * 32.0f;
+            glm::vec3 chunk_i = glm::floor(vec / 16.0f);
+            glm::vec3 chunk_v = chunk_i * 16.0f;
             glm::vec3 vox_i = vec - chunk_v;
             auto& sn = *core.chunks[chunk_i].surface_net.get();
             hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
@@ -146,19 +175,70 @@ bool collision_test() {
                 collide = true;
             }
         }
+    }*/
+
+    minmax = {
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__},
+        std::array<int, 2>{__INT_MAX__, -__INT_MAX__}
+    };
+
+    for(int i = 0; i < 3; ++i) {
+        for(glm::vec3 v : camera_hitbox.vertices) {
+            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i] * 2 - 0.5f));
+            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i] * 2 - 0.5f));
+        }
     }
 
+    for(int x = minmax[0][0]; x <= minmax[0][1]; ++x) {
+        for(int y = minmax[1][0]; y <= minmax[1][1]; ++y) {
+            for(int z = minmax[2][0]; z <= minmax[2][1]; ++z) {
+                collision_queue.push(glm::vec3{x, y, z});
+            }
+        }
+    }
 
+    while(collision_queue.size() != 0) {
+        glm::vec3 vec = collision_queue.top();
+        collision_queue.pop();
+        if(get_voxel(vec) != 0) {
+            v.push_back(vec);
+            hexahedron obb;
+
+            for(int x = 0; x < 2; ++x) {
+                for(int y = 0; y < 2; ++y) {
+                    for(int z = 0; z < 2; ++z) {
+                        uint8_t index = x + y * 2 + z * 4;
+                        obb.vertices[index] = (corners[index] + vec) * 0.5f;
+                    }
+                }
+            }
+
+            if(check_collisions_obb(camera_hitbox, obb, mtv)) {
+                glm::vec3 impact_vel = core.vel;
+                glm::vec3 collision_normal = glm::normalize(mtv);
+                
+                glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
+                glm::vec3 tangent = impact_vel - penetration;
+
+                float r = 1 + bounce;
+                float f = friction;
+
+                float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
+
+                core.vel -= penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb)) ? f : coulomb));
+
+                core.view_pos += mtv;
+                for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+                collide = true;
+            }
+        }
+    }
 
 
 
 
     collision_queue_box = std::priority_queue<glm::vec3, std::vector<glm::vec3>, col_queue_compare1>();
-
-    for(int i = 0; i < 8; ++i) {
-        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
-        box_hitbox.vertices[i] = glm::vec4(box.pos + box.size * iv + pos, 1.0);
-    }
 
     glm::vec3 center = glm::round(core.view_pos);
 
@@ -170,8 +250,8 @@ bool collision_test() {
 
     for(int i = 0; i < 3; ++i) {
         for(glm::vec3 v : box_hitbox.vertices) {
-            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i]));
-            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i]));
+            minmax[i][0] = std::min(minmax[i][0], (int)floor(v[i] * 2 - 0.5f));
+            minmax[i][1] = std::max(minmax[i][1], (int)ceil(v[i] * 2 - 0.5f));
         }
     }
 
@@ -186,15 +266,20 @@ bool collision_test() {
     while(collision_queue_box.size() != 0) {
         glm::vec3 vec = collision_queue_box.top();
         collision_queue_box.pop();
-        if(get_block(vec) != 0) {
+        if(get_voxel(vec) != 0) {
             v.push_back(vec);
-            glm::vec3 chunk_i = glm::floor(vec / 32.0f);
-            glm::vec3 chunk_v = chunk_i * 32.0f;
-            glm::vec3 vox_i = vec - chunk_v;
-            auto& sn = *core.chunks[chunk_i].surface_net.get();
-            hexahedron hex = {sn[vox_i.x][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z] + chunk_v, sn[vox_i.x][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y][vox_i.z + 1] + chunk_v, sn[vox_i.x][vox_i.y + 1][vox_i.z + 1] + chunk_v, sn[vox_i.x + 1][vox_i.y + 1][vox_i.z + 1] + chunk_v};
-            
-            if(check_collisions(box_hitbox, hex, mtv)) {
+            hexahedron obb;
+
+            for(int x = 0; x < 2; ++x) {
+                for(int y = 0; y < 2; ++y) {
+                    for(int z = 0; z < 2; ++z) {
+                        uint8_t index = x + y * 2 + z * 4;
+                        obb.vertices[index] = (corners[index] + vec) * 0.5f;
+                    }
+                }
+            }
+
+            if(check_collisions_obb(box_hitbox, obb, mtv)) {
                 glm::vec3 impact_vel = vel;
                 glm::vec3 collision_normal = glm::normalize(mtv);
                 
@@ -209,31 +294,9 @@ bool collision_test() {
                 vel -= penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb)) ? f : coulomb));
 
                 pos += mtv;
-                for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
+                for(glm::vec3& v : box_hitbox.vertices) v += mtv;
             }
         }
-    }
-
-    
-    if(check_collisions(box_hitbox, camera_hitbox, mtv)) {
-        glm::vec3 impact_vel = vel - core.vel;
-        glm::vec3 collision_normal = glm::normalize(mtv);
-        
-        glm::vec3 penetration = collision_normal * glm::dot(impact_vel, collision_normal);
-        glm::vec3 tangent = impact_vel - penetration;
-
-        float r = 1 + bounce;
-        float f = friction;
-
-        float coulomb = -glm::dot(collision_normal, glm::normalize(impact_vel)) * glm::length(impact_vel) * 54;
-
-        glm::vec3 new_vel = penetration * r + ((glm::isnan(coulomb)) ? glm::vec3(0) : tangent * ((abs(f) < abs(coulomb) || glm::isnan(coulomb)) ? f : coulomb));
-        vel -= new_vel * 0.5f;
-        core.vel += new_vel * 0.5f;
-
-        pos += mtv * 0.5f;
-        core.view_pos -= mtv * 0.5f;
-        for(glm::vec3& v : camera_hitbox.vertices) v += mtv;
     }
 
     return collide;
@@ -241,6 +304,7 @@ bool collision_test() {
 
 float coyote_time = 0.0f;
 
+bool is_small_global;
 void calculate(double delta_time) {
     bool jump = false;
 
@@ -261,32 +325,19 @@ void calculate(double delta_time) {
                     }
                 } else if(k.key == GLFW_KEY_MINUS) {
                     if(k.action == GLFW_PRESS) {
-                        std::vector<glm::ivec3> keys;
-                        for(auto& [k, c] : core.chunks) {
-                            keys.push_back(k);
-                        }
-
-                        core.gen_queue_mutex.lock();
-                        core.chunk_allocate_main_mutex.lock();
-                        core.buffer_update_mutex.lock();
-
-                        for(glm::ivec3 k : keys) {
-                            core.chunks.erase(k);
-                        }
-                        core.chunk_buffer_updates.clear();
-                        core.chunk_gen_queue = decltype(core.chunk_gen_queue)();
-
-                        core.gen_queue_mutex.unlock();
-                        core.chunk_allocate_main_mutex.unlock();
-                        core.buffer_update_mutex.unlock();
+                        --core.active_voxel;
                     }
                 } else if(k.key == GLFW_KEY_EQUAL) {
                     if(k.action == GLFW_PRESS) {
-                        core.space_core.sim_active = !core.space_core.sim_active;
+                        ++core.active_voxel;
                     }
                 } else if(k.key == GLFW_KEY_SPACE) {
                     if(k.action == GLFW_PRESS) {
                         jump = true;
+                    }
+                } else if(k.key == GLFW_KEY_C) {
+                    if(k.action == GLFW_PRESS) {
+                        core.chunk_debug = !core.chunk_debug;
                     }
                 }
                 break;
@@ -297,54 +348,10 @@ void calculate(double delta_time) {
                 if(m.button == GLFW_MOUSE_BUTTON_LEFT) {
                     if(m.action == GLFW_PRESS) {
                         glm::ivec3 pos;
-                        if(raycast(core.view_pos, core.view_dir, pos, 5.0f)) {
-                            get_block(pos) = 0;
-
-                            glm::ivec3 i = glm::floor(glm::vec3(pos) / 32.0f);
-                            glm::ivec3 chunk_i = mod(pos, 32);
-                            core.chunks[i].status = 3;
-                            core.chunk_gen_queue.push(i);
-
-                            if(chunk_i.x == 0) {
-                                glm::ivec3 key = i + glm::ivec3{-1, 0, 0};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            } else if(chunk_i.x == 31) {
-                                glm::ivec3 key = i + glm::ivec3{1, 0, 0};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            }
-                            if(chunk_i.y == 0) {
-                                glm::ivec3 key = i + glm::ivec3{0, -1, 0};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            } else if(chunk_i.y == 31) {
-                                glm::ivec3 key = i + glm::ivec3{0, 1, 0};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            }
-                            if(chunk_i.z == 0) {
-                                glm::ivec3 key = i + glm::ivec3{0, 0, -1};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            } else if(chunk_i.z == 31) {
-                                glm::ivec3 key = i + glm::ivec3{0, 0, 1};
-                                core.chunks[key].status = 3;
-                                core.chunk_gen_queue.push(key);
-                            }
-                        }
-                    }
-                } else if(m.button == GLFW_MOUSE_BUTTON_RIGHT) {
-                    if(m.action == GLFW_PRESS) {
-                        glm::ivec3 pos;
-                        if(raycast_place(core.view_pos, core.view_dir, pos, 5.0f)) {
-                            uint16_t& block = get_block(pos);
-
-                            glm::ivec3 key = glm::floor((glm::vec3)pos / 32.0f);
-
-                            if(block == 0) {
-                                block = 1;
-                                core.block_updates.insert(pos);
+                        bool is_small;
+                        if(raycast(core.view_pos, core.view_dir, pos, is_small, 5.0f)) {
+                            if(is_small) {
+                                get_voxel(pos) = 0;
 
                                 glm::ivec3 i = glm::floor(glm::vec3(pos) / 32.0f);
                                 glm::ivec3 chunk_i = mod(pos, 32);
@@ -378,6 +385,133 @@ void calculate(double delta_time) {
                                     core.chunks[key].status = 3;
                                     core.chunk_gen_queue.push(key);
                                 }
+                            } else {
+                                get_terrain_voxel(pos) = 0;
+
+                                glm::ivec3 i = glm::floor(glm::vec3(pos) / 16.0f);
+                                glm::ivec3 chunk_i = mod(pos, 16);
+                                core.chunks[i].status = 3;
+                                core.chunk_gen_queue.push(i);
+
+                                if(chunk_i.x == 0) {
+                                    glm::ivec3 key = i + glm::ivec3{-1, 0, 0};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                } else if(chunk_i.x == 15) {
+                                    glm::ivec3 key = i + glm::ivec3{1, 0, 0};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                }
+                                if(chunk_i.y == 0) {
+                                    glm::ivec3 key = i + glm::ivec3{0, -1, 0};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                } else if(chunk_i.y == 15) {
+                                    glm::ivec3 key = i + glm::ivec3{0, 1, 0};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                }
+                                if(chunk_i.z == 0) {
+                                    glm::ivec3 key = i + glm::ivec3{0, 0, -1};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                } else if(chunk_i.z == 15) {
+                                    glm::ivec3 key = i + glm::ivec3{0, 0, 1};
+                                    core.chunks[key].status = 3;
+                                    core.chunk_gen_queue.push(key);
+                                }
+                            }
+                        }
+                    }
+                } else if(m.button == GLFW_MOUSE_BUTTON_RIGHT) {
+                    if(m.action == GLFW_PRESS) {
+                        glm::ivec3 pos;
+                        bool is_small = voxel_data[core.active_voxel].block;
+                        if(raycast_place(core.view_pos, core.view_dir, pos, is_small, 5.0f)) {
+                            if(is_small) {
+                                uint16_t& block = get_voxel(pos);
+
+                                glm::ivec3 key = glm::floor((glm::vec3)pos / 32.0f);
+
+                                if(block == 0) {
+                                    block = core.active_voxel;
+                                    core.block_updates.insert(pos);
+
+                                    glm::ivec3 i = glm::floor(glm::vec3(pos) / 32.0f);
+                                    glm::ivec3 chunk_i = mod(pos, 32);
+                                    core.chunks[i].status = 3;
+                                    core.chunk_gen_queue.push(i);
+
+                                    if(chunk_i.x == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{-1, 0, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.x == 31) {
+                                        glm::ivec3 key = i + glm::ivec3{1, 0, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                    if(chunk_i.y == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{0, -1, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.y == 31) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 1, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                    if(chunk_i.z == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 0, -1};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.z == 31) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 0, 1};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                }
+                            } else {
+                                uint16_t& block = get_terrain_voxel(pos);
+
+                                glm::ivec3 key = glm::floor((glm::vec3)pos / 16.0f);
+
+                                if(block == 0) {
+                                    block = core.active_voxel;
+                                    core.block_updates.insert(pos);
+
+                                    glm::ivec3 i = glm::floor(glm::vec3(pos) / 16.0f);
+                                    glm::ivec3 chunk_i = mod(pos, 32);
+                                    core.chunks[i].status = 3;
+                                    core.chunk_gen_queue.push(i);
+
+                                    if(chunk_i.x == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{-1, 0, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.x == 15) {
+                                        glm::ivec3 key = i + glm::ivec3{1, 0, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                    if(chunk_i.y == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{0, -1, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.y == 15) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 1, 0};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                    if(chunk_i.z == 0) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 0, -1};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    } else if(chunk_i.z == 15) {
+                                        glm::ivec3 key = i + glm::ivec3{0, 0, 1};
+                                        core.chunks[key].status = 3;
+                                        core.chunk_gen_queue.push(key);
+                                    }
+                                }
                             }
                         }
                     }
@@ -408,6 +542,9 @@ void calculate(double delta_time) {
     }
     /*if(core.key_map[GLFW_KEY_LEFT_SHIFT]) {
         core.view_pos -= core.up_dir * float(core.move_speed * delta_time);
+    }
+    if(core.key_map[GLFW_KEY_SPACE]) {
+        core.view_pos += core.up_dir * float(core.move_speed * delta_time);
     }*/
 
     core.vel += core.accel * float(delta_time);
@@ -418,17 +555,18 @@ void calculate(double delta_time) {
     
     core.chunk_allocate_thread_mutex.lock();
 
-    if(collision_test()) {
+    is_collision = collision_test();
+    if(is_collision) {
         coyote_time = 0.0f;
     } else {
         coyote_time += delta_time;
     }
 
-    if(jump && coyote_time < 0.125f) {
-        core.vel.z += 6;
+    if(jump && coyote_time < 0.2f) {
+        core.vel.z += 10;
     }
 
-    if(raycast(core.view_pos, core.view_dir, core.selected_block, 5.0f)) {
+    if(raycast(core.view_pos, core.view_dir, core.selected_block, is_small_global, 5.0f)) {
         core.block_selected = true;
     } else {
         core.block_selected = false;
@@ -441,7 +579,7 @@ void calculate(double delta_time) {
         std::get<1>(core.gui_core.widgets[1]).load_buffers(core.gui_core.font, "Coordinates: " + to_hex((int)core.current_coordinate.x) + " " + to_hex((int)core.current_coordinate.y) + " " + to_hex((int)core.current_coordinate.z));
     }
 
-    glm::ivec3 new_index = glm::floor(core.view_pos / 32.0f);
+    glm::ivec3 new_index = glm::floor(core.view_pos / 16.0f);
     if(core.current_index != new_index) {
         core.gen_queue_mutex.lock();
         core.current_index = new_index;
@@ -598,12 +736,40 @@ glm::vec3 multiply(glm::vec3 v, glm::mat4 m) {
     return m * glm::vec4(v, 1.0);
 }
 
+std::array<glm::ivec2, 4> character_select = {glm::ivec2{0, 2}, glm::ivec2{0, 1}, glm::ivec2{0, 0}, glm::ivec2{0, 3}};
+
+glm::vec2 proj_plane(glm::vec3 a, glm::vec3 normal) {
+    return a - normal * dot(a, normal);
+}
+
+glm::vec2 proj_vec(glm::vec2 a, glm::vec2 axis) {
+    glm::vec2 y_axis = {-axis.y, axis.x};
+    return glm::vec2(dot(a, axis), dot(a, y_axis));
+}
+
+glm::ivec2 get_select(glm::vec3 billbd_pos, glm::vec3 view_pos, glm::vec3 billbd_look, glm::vec3 billbd_axis) {
+    glm::vec2 look_proj = proj_plane(billbd_look, billbd_axis);
+    glm::vec2 view_proj = proj_plane(view_pos - billbd_pos, billbd_axis);
+
+    view_proj = glm::normalize(proj_vec(view_proj, look_proj));
+
+    if(view_proj.x > M_SQRT1_2) {
+        return character_select[0];
+    } else if(view_proj.x < -M_SQRT1_2) {
+        return character_select[2];
+    } else if(view_proj.y < 0) {
+        return character_select[1];
+    } else {
+        return character_select[3];
+    }
+}
+
 void Core::game_loop() {
 
     glEnable(GL_DEPTH_TEST);
 
     uint64_t current_time = get_time();
-    double delta_time = double(current_time - time) / 1000000 * (86400 / 0x10000);
+    double delta_time = double(current_time - time) / 1000000;
     time = current_time;
 
     calculate(delta_time);
@@ -678,7 +844,7 @@ void Core::game_loop() {
                 if(chunks.contains(key)) {
                     Chunk& c = chunks[key];
                     if(c.status == 2 || c.status == 3) {
-                        aabb chunk_aabb(glm::vec3(key * 0x20) - 1.0f, {0x21, 0x21, 0x21});
+                        aabb chunk_aabb(glm::vec3(key * 0x10) - 1.0f, {0x11, 0x11, 0x11});
                         if(check_collisions(chunk_aabb, frustum)) {
                             c.buffer.bind();
                             glUniformMatrix4fv(0, 1, false, &view[0][0]);
@@ -693,7 +859,7 @@ void Core::game_loop() {
         }
     }
 
-    core.any_shader.use();
+    /*core.any_shader.use();
     glUniformMatrix4fv(0, 1, false, &projection[0][0]);
     glUniformMatrix4fv(1, 1, false, &view[0][0]);
     glUniform3fv(2, 8, &camera_hitbox.vertices[0][0]);
@@ -703,7 +869,21 @@ void Core::game_loop() {
     glUniformMatrix4fv(0, 1, false, &projection[0][0]);
     glUniformMatrix4fv(1, 1, false, &view[0][0]);
     glUniform3fv(2, 8, &box_hitbox.vertices[0][0]);
-    glDrawArrays(GL_LINES, 0, 24);
+    glDrawArrays(GL_LINES, 0, 24);*/
+
+    glm::mat4 model = glm::inverse(glm::lookAt(pos, glm::vec3(core.view_pos.xy(), pos.z), {0, 0, 1}));
+
+    x_tex.bind(0);
+    core.billboard_shader.use();
+    glUniformMatrix4fv(0, 1, false, &projection[0][0]);
+    glUniformMatrix4fv(1, 1, false, &view[0][0]);
+    glUniformMatrix4fv(2, 1, false, &model[0][0]);
+    glUniform2f(3, 2, 2);
+
+    glm::vec2 active_tex = get_select(pos, view_pos, {0, -1, 0}, {0, 0, 1});
+    glm::vec4 select = {active_tex.x, active_tex.y, 5, 4};
+    glUniform4fv(4, 1, &select[0]);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
     /*any_shader.use();
     glUniformMatrix4fv(0, 1, false, &projection[0][0]);
@@ -713,22 +893,35 @@ void Core::game_loop() {
 
     chunk_allocate_thread_mutex.unlock();
 
-    for(glm::vec3 vec3 : v) {
+    if(chunk_debug) {
+        glm::vec3 chunk_vec = core.current_index * 0x20;
+
+        chunk_debug_shader.use();
+        glUniformMatrix4fv(0, 1, false, &projection[0][0]);
+        glUniformMatrix4fv(1, 1, false, &view[0][0]);
+        glUniform3fv(2, 1, &chunk_vec[0]);
+        glDrawArrays(GL_LINES, 0, 792);
+    }
+
+    /*for(glm::vec3 vec3 : v) {
         cube_shader.use();
         glUniformMatrix4fv(0, 1, false, &view[0][0]);
         glUniformMatrix4fv(1, 1, false, &projection[0][0]);
         glUniform3fv(2, 1, &vec3[0]);
         glUniform3f(3, 1.0f, 0.0f, 0.0f);
         glDrawArrays(GL_LINES, 0, 24);
-    }
+    }*/
 
-    /*cube_shader.use();
-    glm::vec3 fv = view_pos;
-    glUniformMatrix4fv(0, 1, false, &view[0][0]);
-    glUniformMatrix4fv(1, 1, false, &projection[0][0]);
-    glUniform3fv(2, 1, &fv[0]);
-    glUniform3f(3, 1.0f, 0.0f, 0.0f);
-    glDrawArrays(GL_LINES, 0, 24);*/
+    if(core.block_selected) {
+        cube_shader.use();
+        glm::vec3 fv = core.selected_block;
+        glUniformMatrix4fv(0, 1, false, &view[0][0]);
+        glUniformMatrix4fv(1, 1, false, &projection[0][0]);
+        glUniform3fv(2, 1, &fv[0]);
+        glUniform3f(3, 0.0f, 0.0f, 0.0f);
+        glUniform1i(4, is_small_global);
+        glDrawArrays(GL_LINES, 0, 24);
+    }
 
     /*grid_shader.use();
     glUniformMatrix4fv(0, 1, false, &view[0][0]);
@@ -782,8 +975,6 @@ void calc_normals() {
 }
 
 int main() {
-    core.view_pos = {-0x17, 0xA, 1};
-
     // init glfw and set version
     if(glfwInit() == GLFW_FALSE) {
         std::cout << "ERROR: GLFW failed to load.\n";

@@ -24,7 +24,7 @@ void main() {
     col = ((dot(normal, norm_light) + 1) * 0.5 * 0.65 + 0.35) * weight + global_light * (1 - weight);
     //col = (dot(normal, vec3(0, 0, 1)) + 1) * 0.5;
 
-    gl_Position = proj * (view * vec4(pos + offset * 16, 1.0));
+    gl_Position = proj * (view * vec4(pos + offset * 32, 1.0));
 
     tex = tex_coord;
     tile_c = tile_coord;

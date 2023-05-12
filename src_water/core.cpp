@@ -426,9 +426,11 @@ struct Space_core {
         textures[4].load("res/planet_surfaces/icy.png");
         textures[5].load("res/planet_surfaces/dusty.png");
         textures[6].load("res/planet_surfaces/barren.png");
+        std::cout << "check";
 
         planet_shader.compile("res/shaders/planet.vs", "res/shaders/planet.fs");
         planet_shader_solid.compile("res/shaders/planet_solid.vs", "res/shaders/planet_solid.fs");
+        std::cout << "check";
 
         planets.push_back(Planet(glm::vec3{0, 0, 0}, 0x20, 0x1000, 87, -1, true, {1.0, 0.8, 0.5}, true));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0xE0, 0x5.0p0f, 0xF.0p0f, 0x80, 1));
@@ -443,6 +445,7 @@ struct Space_core {
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x6C0, 0x3.8p0f, 0xC.0p0f, 0x80, 1));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0xC, 0x0.6p0f, 0x0.2p0f, 0x80, 4));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x28, 0x0.28p0f, 0x0.08p0f, 0x80, 4));
+        std::cout << "check";
 
         orbit(planets[1], planets[0]);
         orbit(planets[2], planets[0]);
@@ -456,6 +459,7 @@ struct Space_core {
         orbit(planets[10], planets[0]);
         orbit(planets[11], planets[10]);
         orbit(planets[12], planets[10]);
+        std::cout << "check";
 
         light_pos = planets[0].position;
         
@@ -468,18 +472,20 @@ struct Space_core {
             p.buffer.set_attrib(1, 3, sizeof(float) * 8, sizeof(float) * 3);
             p.buffer.set_attrib(2, 2, sizeof(float) * 8, sizeof(float) * 6);
         }
+        std::cout << "check";
 
         thread = std::thread(
             [this]() {
                 loop();
             }
         );
+        std::cout << "check";
     }
 
     void draw(glm::mat4 view_mat, glm::mat4 proj_mat);
 };
 
-const glm::ivec3 region = {5, 5, 5};
+const glm::ivec3 region = {16, 16, 16};
 
 const int factor = 32;
 const float freq = 1.0 / factor;
@@ -522,10 +528,7 @@ glm::ivec3 mod(glm::ivec3 x, int y) {
 struct Chunk {
     glm::ivec3 index;
     std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>> voxels = std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>>(new std::array<std::array<std::array<uint16_t, 0x20>, 0x20>, 0x20>);
-    
-    std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x10>, 0x10>, 0x10>> terrain_voxels = std::unique_ptr<std::array<std::array<std::array<uint16_t, 0x10>, 0x10>, 0x10>>(new std::array<std::array<std::array<uint16_t, 0x10>, 0x10>, 0x10>);
-    std::unique_ptr<std::array<std::array<std::array<glm::vec3, 0x11>, 0x11>, 0x11>> surface_net = std::unique_ptr<std::array<std::array<std::array<glm::vec3, 0x11>, 0x11>, 0x11>>(new std::array<std::array<std::array<glm::vec3, 0x11>, 0x11>, 0x11>);
-    
+
     Buffer buffer;
     uint8_t status = 0;
     std::vector<chunk_vertex> vertices;
@@ -582,6 +585,7 @@ struct Core {
     Shader billboard_shader;
     Shader chunk_debug_shader;
     Shader any_shader;
+    Shader atmo_shader;
 
     Texture tex;
     Texture x_tex;
@@ -594,6 +598,7 @@ struct Core {
     Gui_core gui_core;
     Space_core space_core;
     Framebuffer<1> gui_framebuffer;
+    Framebuffer<1> terrain_framebuffer;
 
     glm::ivec3 selected_block;
     bool block_selected = false;
@@ -655,6 +660,7 @@ struct Core {
 
         glViewport(0, 0, viewport_size.x, viewport_size.y);
         gui_framebuffer.resize(viewport_size);
+        terrain_framebuffer.resize(viewport_size);
         space_core.framebuffer.resize(viewport_size);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -674,8 +680,9 @@ struct Core {
             glm::mat4 rotate_matrix_y = glm::rotate(identity_matrix_4, float(2 * M_PI * 0x0.004p0 * difference.y), glm::cross(view_dir, up_dir));
             glm::vec3 new_view_dir = (rotate_matrix_y * glm::vec4(view_dir, 1.0));
 
-            if(new_view_dir.z < 0x0.FFp0f && new_view_dir.z > -0x0.FFp0f) view_dir = rotate_matrix_x * glm::vec4(new_view_dir, 1.0);
-            else view_dir = rotate_matrix_x * glm::vec4(view_dir, 1.0);
+            if((new_view_dir.z < 0 && view_dir.z < 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0))) || (new_view_dir.z > 0 && view_dir.z > 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0)))) {
+                view_dir = rotate_matrix_x * glm::vec4(view_dir, 1.0);
+            } else view_dir = rotate_matrix_x * glm::vec4(new_view_dir, 1.0);
         }
 
         cursor_pos = new_cursor_pos;
@@ -745,16 +752,16 @@ struct voxel_info {
 };
 
 std::unordered_map<uint16_t, voxel_info> voxel_data = {
-    {0, voxel_info({0, 0}, true)},
-    {1, voxel_info({1, 0}, true)},
-    {2, voxel_info({{1, 0}, {2, 0}, {3, 0}}, {2, 2, 2, 2, 0, 1}, true, true, true)},
-    {3, voxel_info({1, 1}, true)},
-    {4, voxel_info({{1, 3}, {2, 3}, {3, 3}}, {2, 2, 2, 2, 0, 1}, true, true, true)},
-    {5, voxel_info({1, 2}, true)},
-    {6, voxel_info({0, 2}, true)},
-    {7, voxel_info({{2, 2}, {3, 2}}, {0, 0, 0, 0, 1, 1}, true)},
+    {0, voxel_info({0, 0})},
+    {1, voxel_info({1, 0})},
+    {2, voxel_info({{1, 0}, {2, 0}, {3, 0}}, {2, 2, 2, 2, 0, 1}, false, true, true)},
+    {3, voxel_info({1, 1})},
+    {4, voxel_info({{1, 3}, {2, 3}, {3, 3}}, {2, 2, 2, 2, 0, 1}, false, true, true)},
+    {5, voxel_info({1, 2})},
+    {6, voxel_info({0, 2})},
+    {7, voxel_info({{2, 2}, {3, 2}}, {0, 0, 0, 0, 1, 1})},
     {8, voxel_info({2, 1}, true)},
-    {9, voxel_info({3, 1}, true)}
+    {9, voxel_info({3, 1})}
 };
 
 bool const comparator_nearest_chunk::operator()(const glm::ivec3& a, const glm::ivec3& b) const {
@@ -787,21 +794,12 @@ void Chunk::generate() {
         for(float y = 0; y < 0x20; ++y) {
             for(float z = 0; z < 0x21; ++z) {
                 heightmap[z][y][x] = noise[z][y][x];
-                heightmap[z][y][x] = heightmap[z][y][x];
+                heightmap[z][y][x] = heightmap[z][y][x] * 12 + 128 * 0.9 - glm::length(chunk_vec + glm::vec3(x, y, z));
             }
         }
     }
 
-    auto& terrain_voxels_ref = (*terrain_voxels.get());
     auto& voxels_ref = (*voxels.get());
-
-    for(float x = 0; x < 0x10; ++x) {
-        for(float y = 0; y < 0x10; ++y) {
-            for(float z = 0; z < 0x10; ++z) {
-                terrain_voxels_ref[x][y][z] = 0;
-            }
-        }
-    }
 
     for(float x = 0; x < 0x20; ++x) {
         for(float y = 0; y < 0x20; ++y) {
@@ -811,7 +809,7 @@ void Chunk::generate() {
                 uint16_t vox = 0;
 
                 if(density > 0.0) {
-                    if(density < 0.10) {
+                    if(density < 8) {
                         if(heightmap[z + 1][y][x] <= 0.0) {
                             vox = 2;
                         } else {
@@ -890,66 +888,6 @@ void Chunk::generate() {
     // result[x + y * 0x20 + z * 0x400] * 6 + 0x80 - glm::length(glm::vec3(x, y, z) + glm::vec3(chunk_vec)) > 0.0f
 }
 
-std::array<uint16_t, 8> get_surrounding_terrain_voxels(int x, int y, int z, std::array<std::array<std::array<std::array<uint16_t, 16>, 16>, 16>*, 8> arr) {
-    std::array<uint16_t, 8> voxels;
-
-    for(uint8_t ix = 0; ix < 2; ix++) {
-        for(uint8_t iy = 0; iy < 2; iy++) {
-            for(uint8_t iz = 0; iz < 2; iz++) {
-                glm::ivec3 v = {x + ix, y + iy, z + iz};
-                int i = ix + iy * 2 + iz * 4;
-
-                glm::ivec3 chunk_index = {v.x > 0x1F, v.y > 0x1F, v.z > 0x1F};
-                glm::ivec3 voxel_index = v - (chunk_index * 0x20);
-
-                voxels[i] = (*arr[chunk_index.x + chunk_index.y * 2 + chunk_index.z * 4])[voxel_index.x][voxel_index.y][voxel_index.z];
-            }
-        }
-    }
-
-    return voxels;
-}
-
-std::array<uint16_t, 8> get_surrounding_terrain_voxels(int x, int y, int z, std::array<std::array<std::array<std::array<uint16_t, 16>, 16>, 16>*, 27> arr) {
-    std::array<uint16_t, 8> voxels;
-
-    for(uint8_t ix = 0; ix < 2; ix++) {
-        for(uint8_t iy = 0; iy < 2; iy++) {
-            for(uint8_t iz = 0; iz < 2; iz++) {
-                glm::ivec3 v = {x + ix, y + iy, z + iz};
-                int i = ix + iy * 2 + iz * 4;
-
-                glm::ivec3 chunk_index = {floor(float(v.x) / 0x10), floor(float(v.y) / 0x10), floor(float(v.z) / 0x10)};
-                glm::ivec3 voxel_index = v - (chunk_index * 0x10);
-
-                voxels[i] = (*arr[(chunk_index.x + 1) + (chunk_index.y + 1) * 3 + (chunk_index.z + 1) * 9])[voxel_index.x][voxel_index.y][voxel_index.z];
-            }
-        }
-    }
-
-    return voxels;
-}
-
-std::array<uint16_t, 27> get_surrounding_terrain_voxels(glm::ivec3 pos, std::array<std::array<std::array<std::array<uint16_t, 16>, 16>, 16>*, 27> arr) {
-    std::array<uint16_t, 27> voxels;
-
-    for(uint8_t ix = 0; ix < 3; ix++) {
-        for(uint8_t iy = 0; iy < 3; iy++) {
-            for(uint8_t iz = 0; iz < 3; iz++) {
-                glm::ivec3 v = {pos.x + ix - 1, pos.y + iy - 1, pos.z + iz - 1};
-                int i = ix + iy * 3 + iz * 9;
-
-                glm::ivec3 chunk_index = {floor(float(v.x) / 0x10), floor(float(v.y) / 0x10), floor(float(v.z) / 0x10)};
-                glm::ivec3 voxel_index = v - (chunk_index * 0x10);
-
-                voxels[i] = (*arr[(chunk_index.x + 1) + (chunk_index.y + 1) * 3 + (chunk_index.z + 1) * 9])[voxel_index.x][voxel_index.y][voxel_index.z];
-            }
-        }
-    }
-
-    return voxels;
-}
-
 std::array<uint16_t, 27> get_surrounding_voxels(glm::ivec3 pos, std::array<std::array<std::array<std::array<uint16_t, 32>, 32>, 32>*, 27> arr) {
     std::array<uint16_t, 27> voxels;
 
@@ -970,58 +908,7 @@ std::array<uint16_t, 27> get_surrounding_voxels(glm::ivec3 pos, std::array<std::
     return voxels;
 }
 
-glm::vec3 get_point(std::array<uint16_t, 8> voxels) {
-    //return {0.5, 0.5, 0.5};
-    
-    std::vector<glm::vec3> vec;
-
-    uint8_t i = 0;
-
-    for(int a = 0; a < 8; ++a) i |= (!(voxel_data[voxels[a]].block == true) << a);
-
-    if(i == 0 || i == 255) return {0.5, 0.5, 0.5};
-
-    std::set<uint8_t> s;
-
-    for(uint8_t a : triangle_table[i]) s.insert(a);
-
-    for(uint8_t a : s) vec.push_back(midpoint_vertices[a]);
-
-    glm::vec3 avg = {0, 0, 0};
-    for(glm::vec3 v : vec) avg += v;
-
-    avg /= float(vec.size());
-
-    return avg;
-}
-
 void Chunk::load_neighbors() {
-    /*
-    if(!core.chunks.contains(index + glm::ivec3{-1, 0, 0})) {
-        core.chunks.emplace(index + glm::ivec3{-1, 0, 0}, Chunk(index + glm::ivec3{-1, 0, 0}));
-        core.chunks[index + glm::ivec3{-1, 0, 0}].generate();
-    }
-    if(!core.chunks.contains(index + glm::ivec3{1, 0, 0})) {
-        core.chunks.emplace(index + glm::ivec3{1, 0, 0}, Chunk(index + glm::ivec3{1, 0, 0}));
-        core.chunks[index + glm::ivec3{1, 0, 0}].generate();
-    }
-    if(!core.chunks.contains(index + glm::ivec3{0, -1, 0})) {
-        core.chunks.emplace(index + glm::ivec3{0, -1, 0}, Chunk(index + glm::ivec3{0, -1, 0}));
-        core.chunks[index + glm::ivec3{0, -1, 0}].generate();
-    }
-    if(!core.chunks.contains(index + glm::ivec3{0, 1, 0})) {
-        core.chunks.emplace(index + glm::ivec3{0, 1, 0}, Chunk(index + glm::ivec3{0, 1, 0}));
-        core.chunks[index + glm::ivec3{0, 1, 0}].generate();
-    }
-    if(!core.chunks.contains(index + glm::ivec3{0, 0, -1})) {
-        core.chunks.emplace(index + glm::ivec3{0, 0, -1}, Chunk(index + glm::ivec3{0, 0, -1}));
-        core.chunks[index + glm::ivec3{0, 0, -1}].generate();
-    }
-    if(!core.chunks.contains(index + glm::ivec3{0, 0, 1})) {
-        core.chunks.emplace(index + glm::ivec3{0, 0, 1}, Chunk(index + glm::ivec3{0, 0, 1}));
-        core.chunks[index + glm::ivec3{0, 0, 1}].generate();
-    }
-    */
    std::vector<glm::ivec3> keys;
 
     for(int x = -1; x < 2; ++x) {
@@ -1045,539 +932,8 @@ void Chunk::load_neighbors() {
     }
 }
 
-/*glm::vec3 get_point(std::array<uint16_t, 8> voxels) {
-    std::vector<glm::vec3> vec;
-
-    uint8_t i = 0;
-
-    for(int a = 0; a < 8; ++a) i |= (!(voxels[a] == 0) << a);
-
-    if(i == 0 || i == 255) return {0.5, 0.5, 0.5};
-
-    std::set<uint8_t> s;
-
-    for(uint8_t a : triangle_table[i]) s.insert(a);
-
-    for(uint8_t a : s) vec.push_back(midpoint_vertices[a]);
-
-    glm::vec3 avg = {0, 0, 0};
-    for(glm::vec3 v : vec) avg += v;
-
-    avg /= float(vec.size());
-
-    return avg;
-}*/
-
-
-
 void Chunk::create_mesh() {
     load_neighbors();
-
-    std::array<std::array<std::array<std::array<uint16_t, 16>, 16>, 16>*, 27> arr27 = {};
-
-    for(int x = -1; x < 2; ++x) {
-        for(int y = -1; y < 2; ++y) {
-            for(int z = -1; z < 2; ++z) {
-                arr27[(x + 1) + (y + 1) * 3 + (z + 1) * 9] = &(*core.chunks[index + glm::ivec3{x, y, z}].terrain_voxels.get());
-            }
-        }
-    }
-
-    auto& sn = *surface_net.get();
-
-    std::array<std::array<std::array<std::array<uint16_t, 16>, 16>, 16>*, 8> arr = {arr27[13], arr27[14], arr27[16], arr27[17], arr27[22], arr27[23], arr27[25], arr27[26]};
-
-    for(int8_t x = -1; x < 0x10; ++x) {
-        for(int8_t y = -1; y < 0x10; ++y) {
-            for(int8_t z = -1; z < 0x10; ++z) {
-                sn[x + 1][y + 1][z + 1] = (glm::vec3(x, y, z) + get_point(get_surrounding_terrain_voxels(x, y, z, arr27))) + 0.5f;
-            }
-        }
-    }
-
-    for(uint8_t x = 0; x < 0x10; ++x) {
-        for(uint8_t y = 0; y < 0x10; ++y) {
-            for(uint8_t z = 0; z < 0x10; ++z) {
-                glm::vec3 pos = {x, y, z};
-
-                std::array<uint16_t, 27> voxels = get_surrounding_terrain_voxels({x, y, z}, arr27);
-                
-                if(voxels[13] == 0) {
-                    if(voxels[14] != 0) {
-                        voxel_info& v = voxel_data[voxels[14]];
-
-                        if(v.spread && voxel_data[voxels[4]].spread) {
-                            for(int k = 0; k < 2; ++k) {
-                                glm::vec3 a = corners[triangle_table_cube[0][k * 3 + 0]];
-                                glm::vec3 b = corners[triangle_table_cube[0][k * 3 + 1]];
-                                glm::vec3 c = corners[triangle_table_cube[0][k * 3 + 2]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + a, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + b, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x + 1][y + a.y][z + a.z], sn[x + b.x + 1][y + b.y][z + b.z], sn[x + c.x + 1][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                if(isnan(x_vec.x)) {
-                                    if(normal.z > 0) {
-                                        x_vec = {1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    } else {
-                                        x_vec = {-1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    }
-                                }
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
-                                }   
-                            }
-                        } else {
-                            if(v.push) {
-                                glm::vec3 a = corners[triangle_table_cube[0][3]];
-                                glm::vec3 b = corners[triangle_table_cube[0][4]];
-                                glm::vec3 c = corners[triangle_table_cube[0][5]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + a, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + b, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x + 1][y + a.y][z + a.z], sn[x + b.x + 1][y + b.y][z + b.z], sn[x + c.x + 1][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(ver[1] - ver[2]);
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                float dot_top_corner = dot(y_vec, ver[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[0]]});
-                                }
-
-                                a = corners[triangle_table_cube[0][0]];
-                                b = corners[triangle_table_cube[0][1]];
-                                c = corners[triangle_table_cube[0][2]];
-                                std::array<glm::vec3, 3> ver2;
-                                if(v.block) ver2 = {glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + a, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + b, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + c};
-                                else ver2 = {sn[x + a.x + 1][y + a.y][z + a.z], sn[x + b.x + 1][y + b.y][z + b.z], sn[x + c.x + 1][y + c.y][z + c.z]};
-                                normal = glm::normalize(glm::cross(ver2[1] - ver2[0], ver2[2] - ver2[0]));
-
-                                
-
-                                x_vec = glm::normalize(x_vec - normal * dot(normal, x_vec));
-                                y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                dot_top_corner = dot(y_vec, ver2[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver2[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[0]]});
-                                }
-                            } else {
-                                for(int k = 0; k < 2; ++k) {
-                                    glm::vec3 a = corners[triangle_table_cube[0][k * 3 + 0]];
-                                    glm::vec3 b = corners[triangle_table_cube[0][k * 3 + 1]];
-                                    glm::vec3 c = corners[triangle_table_cube[0][k * 3 + 2]];
-                                    std::array<glm::vec3, 3> ver;
-                                    if(v.block) ver = {glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + a, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + b, glm::vec3(1, 0, 0) + glm::vec3(x, y, z) + c};
-                                    else ver = {sn[x + a.x + 1][y + a.y][z + a.z], sn[x + b.x + 1][y + b.y][z + b.z], sn[x + c.x + 1][y + c.y][z + c.z]};
-                                    glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                    
-                                    glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                    glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                    if(isnan(x_vec.x)) {
-                                        if(normal.z > 0) {
-                                            x_vec = {1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        } else {
-                                            x_vec = {-1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        }
-                                    }
-                                    
-                                    for(int l = 0; l < 3; ++l) {
-                                        glm::vec3 position = ver[l];
-                                        glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[0]]});
-                                    }   
-                                }
-                            }
-                        }
-                    }
-                    if(voxels[16] != 0) {
-                        voxel_info& v = voxel_data[voxels[16]];
-
-                        if(v.spread && voxel_data[voxels[4]].spread) {
-                            for(int k = 0; k < 2; ++k) {
-                                glm::vec3 a = corners[triangle_table_cube[1][k * 3 + 0]];
-                                glm::vec3 b = corners[triangle_table_cube[1][k * 3 + 1]];
-                                glm::vec3 c = corners[triangle_table_cube[1][k * 3 + 2]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + a, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + b, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y + 1][z + a.z], sn[x + b.x][y + b.y + 1][z + b.z], sn[x + c.x][y + c.y + 1][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                if(isnan(x_vec.x)) {
-                                    if(normal.z > 0) {
-                                        x_vec = {1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    } else {
-                                        x_vec = {-1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    }
-                                }
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
-                                }   
-                            }
-                        } else {
-                            if(v.push) {
-                                glm::vec3 a = corners[triangle_table_cube[1][3]];
-                                glm::vec3 b = corners[triangle_table_cube[1][4]];
-                                glm::vec3 c = corners[triangle_table_cube[1][5]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + a, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + b, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y + 1][z + a.z], sn[x + b.x][y + b.y + 1][z + b.z], sn[x + c.x][y + c.y + 1][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(ver[1] - ver[2]);
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                float dot_top_corner = dot(y_vec, ver[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[2]]});
-                                }
-
-                                a = corners[triangle_table_cube[1][0]];
-                                b = corners[triangle_table_cube[1][1]];
-                                c = corners[triangle_table_cube[1][2]];
-                                std::array<glm::vec3, 3> ver2;
-                                if(v.block) ver2 = {glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + a, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + b, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + c};
-                                else ver2 = {sn[x + a.x][y + a.y + 1][z + a.z], sn[x + b.x][y + b.y + 1][z + b.z], sn[x + c.x][y + c.y + 1][z + c.z]};
-                                normal = glm::normalize(glm::cross(ver2[1] - ver2[0], ver2[2] - ver2[0]));
-
-                                
-
-                                x_vec = glm::normalize(x_vec - normal * dot(normal, x_vec));
-                                y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                dot_top_corner = dot(y_vec, ver2[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver2[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[2]]});
-                                }
-                            } else {
-                                for(int k = 0; k < 2; ++k) {
-                                    glm::vec3 a = corners[triangle_table_cube[1][k * 3 + 0]];
-                                    glm::vec3 b = corners[triangle_table_cube[1][k * 3 + 1]];
-                                    glm::vec3 c = corners[triangle_table_cube[1][k * 3 + 2]];
-                                    std::array<glm::vec3, 3> ver;
-                                    if(v.block) ver = {glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + a, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + b, glm::vec3(0, 1, 0) + glm::vec3(x, y, z) + c};
-                                    else ver = {sn[x + a.x][y + a.y + 1][z + a.z], sn[x + b.x][y + b.y + 1][z + b.z], sn[x + c.x][y + c.y + 1][z + c.z]};
-                                    glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                    
-                                    glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                    glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                    if(isnan(x_vec.x)) {
-                                        if(normal.z > 0) {
-                                            x_vec = {1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        } else {
-                                            x_vec = {-1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        }
-                                    }
-                                    
-                                    for(int l = 0; l < 3; ++l) {
-                                        glm::vec3 position = ver[l];
-                                        glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[2]]});
-                                    }   
-                                }
-                            }
-                        }
-                    }
-                    if(voxels[22] != 0) {
-                        voxel_info& v = voxel_data[voxels[22]];
-                        
-                        for(int k = 0; k < triangle_table_cube[2].size() / 3; ++k) {
-                            glm::vec3 a = corners[triangle_table_cube[2][k * 3 + 0]];
-                            glm::vec3 b = corners[triangle_table_cube[2][k * 3 + 1]];
-                            glm::vec3 c = corners[triangle_table_cube[2][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver;
-                            if(v.block) ver = {glm::vec3(0, 0, 1) + glm::vec3(x, y, z) + a, glm::vec3(0, 0, 1) + glm::vec3(x, y, z) + b, glm::vec3(0, 0, 1) + glm::vec3(x, y, z) + c};
-                            else ver = {sn[x + a.x][y + a.y][z + a.z + 1], sn[x + b.x][y + b.y][z + b.z + 1], sn[x + c.x][y + c.y][z + c.z + 1]};
-                            glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                            
-                            glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                            glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                            if(isnan(x_vec.x)) {
-                                if(normal.z > 0) {
-                                    x_vec = {1, 0, 0};
-                                    y_vec = {0, 1, 0};
-                                } else {
-                                    x_vec = {-1, 0, 0};
-                                    y_vec = {0, 1, 0};
-                                }
-                            }
-                            
-                            for(int l = 0; l < 3; ++l) {
-                                glm::vec3 position = ver[l];
-                                glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                vertices.push_back({position, normal, tex_coord, v.texture[v.pt[4]]});
-                            }   
-                        }
-                    }
-                } else {
-                    voxel_info& v = voxel_data[voxels[13]];
-
-                    if(voxels[14] == 0) {
-                        if(v.spread && voxel_data[voxels[5]].spread) {
-                            for(int k = 0; k < 2; ++k) {
-                                glm::vec3 a = corners[triangle_table_cube[3][k * 3 + 0]];
-                                glm::vec3 b = corners[triangle_table_cube[3][k * 3 + 1]];
-                                glm::vec3 c = corners[triangle_table_cube[3][k * 3 + 2]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                if(isnan(x_vec.x)) {
-                                    if(normal.z > 0) {
-                                        x_vec = {1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    } else {
-                                        x_vec = {-1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    }
-                                }
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
-                                }
-                            }
-                        } else {
-                            if(v.push) {
-                                glm::vec3 a = corners[triangle_table_cube[3][3]];
-                                glm::vec3 b = corners[triangle_table_cube[3][4]];
-                                glm::vec3 c = corners[triangle_table_cube[3][5]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(ver[1] - ver[2]);
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                float dot_top_corner = dot(y_vec, ver[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[1]]});
-                                }
-
-                                a = corners[triangle_table_cube[3][0]];
-                                b = corners[triangle_table_cube[3][1]];
-                                c = corners[triangle_table_cube[3][2]];
-                                std::array<glm::vec3, 3> ver2;
-                                if(v.block) ver2 = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                else ver2 = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                normal = glm::normalize(glm::cross(ver2[1] - ver2[0], ver2[2] - ver2[0]));
-
-                                
-
-                                x_vec = glm::normalize(x_vec - normal * dot(normal, x_vec));
-                                y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                dot_top_corner = dot(y_vec, ver2[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver2[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[1]]});
-                                }
-                            } else {
-                                for(int k = 0; k < 2; ++k) {
-                                    glm::vec3 a = corners[triangle_table_cube[3][k * 3 + 0]];
-                                    glm::vec3 b = corners[triangle_table_cube[3][k * 3 + 1]];
-                                    glm::vec3 c = corners[triangle_table_cube[3][k * 3 + 2]];
-                                    std::array<glm::vec3, 3> ver;
-                                    if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                    else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                    glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                    
-                                    glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                    glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                    if(isnan(x_vec.x)) {
-                                        if(normal.z > 0) {
-                                            x_vec = {1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        } else {
-                                            x_vec = {-1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        }
-                                    }
-                                    
-                                    for(int l = 0; l < 3; ++l) {
-                                        glm::vec3 position = ver[l];
-                                        glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[1]]});
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if(voxels[16] == 0) {
-                        if(v.spread && voxel_data[voxels[7]].spread) {
-                            for(int k = 0; k < 2; ++k) {
-                                glm::vec3 a = corners[triangle_table_cube[4][k * 3 + 0]];
-                                glm::vec3 b = corners[triangle_table_cube[4][k * 3 + 1]];
-                                glm::vec3 c = corners[triangle_table_cube[4][k * 3 + 2]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                if(isnan(x_vec.x)) {
-                                    if(normal.z > 0) {
-                                        x_vec = {1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    } else {
-                                        x_vec = {-1, 0, 0};
-                                        y_vec = {0, 1, 0};
-                                    }
-                                }
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
-                                }
-                            }
-                        } else {
-                            if(v.push) {
-                                glm::vec3 a = corners[triangle_table_cube[4][3]];
-                                glm::vec3 b = corners[triangle_table_cube[4][4]];
-                                glm::vec3 c = corners[triangle_table_cube[4][5]];
-                                std::array<glm::vec3, 3> ver;
-                                if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                
-                                glm::vec3 x_vec = glm::normalize(ver[1] - ver[2]);
-                                glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                float dot_top_corner = dot(y_vec, ver[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[3]]});
-                                }
-
-                                a = corners[triangle_table_cube[4][0]];
-                                b = corners[triangle_table_cube[4][1]];
-                                c = corners[triangle_table_cube[4][2]];
-                                std::array<glm::vec3, 3> ver2;
-                                if(v.block) ver2 = {glm::vec3(-1, 0, 0) + glm::vec3(x, y, z) + a, glm::vec3(-1, 0, 0) + glm::vec3(x, y, z) + b, glm::vec3(-1, 0, 0) + glm::vec3(x, y, z) + c};
-                                else ver2 = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                normal = glm::normalize(glm::cross(ver2[1] - ver2[0], ver2[2] - ver2[0]));
-
-                                
-
-                                x_vec = glm::normalize(x_vec - normal * dot(normal, x_vec));
-                                y_vec = glm::normalize(glm::cross(normal, x_vec));
-
-                                dot_top_corner = dot(y_vec, ver2[2]);
-                                
-                                for(int l = 0; l < 3; ++l) {
-                                    glm::vec3 position = ver2[l];
-                                    glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position) - dot_top_corner};
-                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[3]]});
-                                }
-                            } else {
-                                for(int k = 0; k < 2; ++k) {
-                                    glm::vec3 a = corners[triangle_table_cube[4][k * 3 + 0]];
-                                    glm::vec3 b = corners[triangle_table_cube[4][k * 3 + 1]];
-                                    glm::vec3 c = corners[triangle_table_cube[4][k * 3 + 2]];
-                                    std::array<glm::vec3, 3> ver;
-                                    if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                                    else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                                    glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                                    
-                                    glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                                    glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                                    if(isnan(x_vec.x)) {
-                                        if(normal.z > 0) {
-                                            x_vec = {1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        } else {
-                                            x_vec = {-1, 0, 0};
-                                            y_vec = {0, 1, 0};
-                                        }
-                                    }
-                                    
-                                    for(int l = 0; l < 3; ++l) {
-                                        glm::vec3 position = ver[l];
-                                        glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[3]]});
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if(voxels[22] == 0) {
-                        for(int k = 0; k < 2; ++k) {
-                            glm::vec3 a = corners[triangle_table_cube[5][k * 3 + 0]];
-                            glm::vec3 b = corners[triangle_table_cube[5][k * 3 + 1]];
-                            glm::vec3 c = corners[triangle_table_cube[5][k * 3 + 2]];
-                            std::array<glm::vec3, 3> ver;
-                            if(v.block) ver = {glm::vec3(x, y, z) + a, glm::vec3(x, y, z) + b, glm::vec3(x, y, z) + c};
-                            else ver = {sn[x + a.x][y + a.y][z + a.z], sn[x + b.x][y + b.y][z + b.z], sn[x + c.x][y + c.y][z + c.z]};
-                            glm::vec3 normal = glm::normalize(glm::cross(ver[1] - ver[0], ver[2] - ver[0]));
-                            
-                            glm::vec3 x_vec = glm::normalize(glm::cross(normal, -core.z_dir));
-                            glm::vec3 y_vec = glm::normalize(glm::cross(normal, x_vec));
-                            if(isnan(x_vec.x)) {
-                                if(normal.z > 0) {
-                                    x_vec = {1, 0, 0};
-                                    y_vec = {0, 1, 0};
-                                } else {
-                                    x_vec = {-1, 0, 0};
-                                    y_vec = {0, 1, 0};
-                                }
-                            }
-                            
-                            for(int l = 0; l < 3; ++l) {
-                                glm::vec3 position = ver[l];
-                                glm::vec2 tex_coord = {dot(x_vec, position), dot(y_vec, position)};
-                                vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
-                            }   
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     std::array<std::array<std::array<std::array<uint16_t, 32>, 32>, 32>*, 27> arr27v = {};
 
@@ -1607,7 +963,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + glm::vec3(1, 0, 0) + corners[triangle_table_cube[0][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(-position.y, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
@@ -1617,7 +972,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + glm::vec3(1, 0, 0) + corners[triangle_table_cube[0][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(-position.y, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[0]]});
@@ -1634,7 +988,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + glm::vec3(0, 1, 0) + corners[triangle_table_cube[1][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(position.x, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
@@ -1644,7 +997,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + glm::vec3(0, 1, 0) + corners[triangle_table_cube[1][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(position.x, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[2]]});
@@ -1660,7 +1012,6 @@ void Chunk::create_mesh() {
                         for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = pos + glm::vec3(0, 0, 1) + corners[triangle_table_cube[2][k * 3 + l]];
-                                position = position * 0.5f;
 
                                 glm::vec2 tex_coord = glm::vec2(position.x, -position.y);
                                 vertices.push_back({position, normal, tex_coord, v.texture[v.pt[4]]});
@@ -1670,15 +1021,81 @@ void Chunk::create_mesh() {
                 } else {
                     voxel_info& v = voxel_data[voxels[13]];
 
-                    if(voxels[14] == 0) {
+                    if(v.block) {
+                        if(voxels[14] != 0) {
+                            voxel_info& v = voxel_data[voxels[14]];
+
+                            glm::vec3 normal = glm::vec3(-1, 0, 0);
+                            
+                            
+                            if(v.spread && voxel_data[voxels[4]].spread) {
+                                for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
+                                    for(int l = 0; l < 3; ++l) {
+                                        glm::vec3 position = pos + glm::vec3(1, 0, 0) + corners[triangle_table_cube[0][k * 3 + l]];
+
+                                        glm::vec2 tex_coord = glm::vec2(-position.y, position.z);
+                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
+                                    }   
+                                }
+                            } else {
+                                for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
+                                    for(int l = 0; l < 3; ++l) {
+                                        glm::vec3 position = pos + glm::vec3(1, 0, 0) + corners[triangle_table_cube[0][k * 3 + l]];
+
+                                        glm::vec2 tex_coord = glm::vec2(-position.y, position.z);
+                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[0]]});
+                                    }   
+                                }
+                            }
+                        }
+                        if(voxels[16] != 0) {
+                            voxel_info& v = voxel_data[voxels[16]];
+
+                            glm::vec3 normal = glm::vec3(0, -1, 0);
+
+                            if(v.spread && voxel_data[voxels[4]].spread) {
+                                for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
+                                    for(int l = 0; l < 3; ++l) {
+                                        glm::vec3 position = pos + glm::vec3(0, 1, 0) + corners[triangle_table_cube[1][k * 3 + l]];
+
+                                        glm::vec2 tex_coord = glm::vec2(position.x, position.z);
+                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
+                                    }   
+                                }
+                            } else {
+                                for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
+                                    for(int l = 0; l < 3; ++l) {
+                                        glm::vec3 position = pos + glm::vec3(0, 1, 0) + corners[triangle_table_cube[1][k * 3 + l]];
+
+                                        glm::vec2 tex_coord = glm::vec2(position.x, position.z);
+                                        vertices.push_back({position, normal, tex_coord, v.texture[v.pt[2]]});
+                                    }   
+                                }
+                            }
+                        }
+                        if(voxels[22] != 0) {
+                            voxel_info& v = voxel_data[voxels[22]];
+
+                            glm::vec3 normal = glm::vec3(0, 0, -1);
+
+                            for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
+                                for(int l = 0; l < 3; ++l) {
+                                    glm::vec3 position = pos + glm::vec3(0, 0, 1) + corners[triangle_table_cube[2][k * 3 + l]];
+
+                                    glm::vec2 tex_coord = glm::vec2(position.x, -position.y);
+                                    vertices.push_back({position, normal, tex_coord, v.texture[v.pt[4]]});
+                                }   
+                            }
+                        }
+                    }
+
+                    if(voxels[14] == 0 || voxel_data[voxels[14]].block) {
                         glm::vec3 normal = glm::vec3(1, 0, 0);
-                        
                         
                         if(v.spread && voxel_data[voxels[5]].spread) {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + corners[triangle_table_cube[3][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(position.y, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
@@ -1688,7 +1105,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + corners[triangle_table_cube[3][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(position.y, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[1]]});
@@ -1696,14 +1112,13 @@ void Chunk::create_mesh() {
                             }
                         }
                     }
-                    if(voxels[16] == 0) {
+                    if(voxels[16] == 0 || voxel_data[voxels[16]].block) {
                         glm::vec3 normal = glm::vec3(0, 1, 0);
                         
                         if(v.spread && voxel_data[voxels[7]].spread) {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + corners[triangle_table_cube[4][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(-position.x, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
@@ -1713,7 +1128,6 @@ void Chunk::create_mesh() {
                             for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                                 for(int l = 0; l < 3; ++l) {
                                     glm::vec3 position = pos + corners[triangle_table_cube[4][k * 3 + l]];
-                                    position = position * 0.5f;
 
                                     glm::vec2 tex_coord = glm::vec2(-position.x, position.z);
                                     vertices.push_back({position, normal, tex_coord, v.texture[v.pt[3]]});
@@ -1721,13 +1135,12 @@ void Chunk::create_mesh() {
                             }
                         }
                     }
-                    if(voxels[22] == 0) {
+                    if(voxels[22] == 0 || voxel_data[voxels[22]].block) {
                         glm::vec3 normal = glm::vec3(0, 0, 1);
 
                         for(int k = 0; k < triangle_table_cube[0].size() / 3; ++k) {
                             for(int l = 0; l < 3; ++l) {
                                 glm::vec3 position = pos + corners[triangle_table_cube[5][k * 3 + l]];
-                                position = position * 0.5f;
 
                                 glm::vec2 tex_coord = glm::vec2(position.x, position.y);
                                 vertices.push_back({position, normal, tex_coord, v.texture[v.pt[5]]});
@@ -1758,31 +1171,12 @@ void Chunk::load_buffers() {
 
 uint16_t null_ref = 0;
 
-uint16_t& get_terrain_voxel(glm::ivec3 pos) {
-    glm::ivec3 key = glm::floor((glm::vec3)pos / 16.0f);
-    if(core.chunks.contains(key)) {
-        return (*core.chunks[key].terrain_voxels)[mod(pos.x, 16)][mod(pos.y, 16)][mod(pos.z, 16)];
-    } else {
-        return null_ref;
-    }
-}
-
 uint16_t& get_voxel(glm::ivec3 pos) {
     glm::ivec3 key = glm::floor((glm::vec3)pos / 32.0f);
     if(core.chunks.contains(key)) {
         return (*core.chunks[key].voxels)[mod(pos.x, 32)][mod(pos.y, 32)][mod(pos.z, 32)];
     } else {
         return null_ref;
-    }
-}
-
-bool get_terrain_voxel(glm::ivec3 pos, uint16_t& output) {
-    glm::ivec3 key = glm::floor((glm::vec3)pos / 16.0f);
-    if(core.chunks.contains(key)) {
-        output = (*core.chunks[key].terrain_voxels)[mod(pos.x, 16)][mod(pos.y, 16)][mod(pos.z, 16)];
-        return true;
-    } else {
-        return false;
     }
 }
 
@@ -1796,15 +1190,7 @@ bool get_voxel(glm::ivec3 pos, uint16_t& output) {
     }
 }
 
-uint16_t& get_terrain_voxel(glm::ivec3 chunk_pos, glm::ivec3 block_pos) {
-    if(core.chunks.contains(chunk_pos)) {
-        return (*core.chunks[chunk_pos].terrain_voxels)[block_pos.x][block_pos.y][block_pos.z];
-    } else {
-        return null_ref;
-    }
-}
-
-void block_update(glm::ivec3 pos) {
+/*void block_update(glm::ivec3 pos) {
     glm::ivec3 i = glm::floor((glm::vec3)pos / 32.0f);
     glm::ivec3 block_i = mod(pos, 32);
     uint16_t& focus_block = get_terrain_voxel(i, block_i);
@@ -2048,9 +1434,9 @@ void block_update(glm::ivec3 pos) {
             }
         }
     }
-}
+}*/
 
-bool raycast(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool& is_small, float limit) {
+bool raycast(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, float limit) {
     glm::vec3 dir_norm = glm::normalize(dir);
     
     glm::ivec3 current_voxel = glm::floor(pos);
@@ -2058,55 +1444,12 @@ bool raycast(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool& is_small, f
     int step_y = (dir.y < 0) ? -1 : 1;
     int step_z = (dir.z < 0) ? -1 : 1;
 
-    float large_dist = 0.0f;
     float small_dist = 0.0f;
-    glm::ivec3 large_coord;
     glm::ivec3 small_coord;
-    glm::vec3 large_pos = pos;
-    glm::vec3 small_pos = pos * 2.0f;
+    glm::vec3 small_pos = pos;
 
     while(true) {
-        if(large_dist > limit) {
-            large_dist = NAN;
-            break;
-        }
-        
-        uint16_t block;
-        bool status = get_terrain_voxel(current_voxel, block);
-        if(!status) {
-            large_dist = NAN;
-            break;
-        }
-
-        if(block != 0) {
-            large_coord = current_voxel;
-            break;
-        }
-
-        float t_x = (float(current_voxel.x + !(step_x >> 31)) - large_pos.x) / dir_norm.x;
-        float t_y = (float(current_voxel.y + !(step_y >> 31)) - large_pos.y) / dir_norm.y;
-        float t_z = (float(current_voxel.z + !(step_z >> 31)) - large_pos.z) / dir_norm.z;
-
-        if(t_x < t_y && t_x < t_z) {
-            large_pos += dir_norm * t_x;
-            large_dist += t_x;
-            current_voxel.x += step_x;
-        } else if(t_y < t_x && t_y < t_z) {
-            large_pos += dir_norm * t_y;
-            large_dist += t_y;
-            current_voxel.y += step_y;
-        } else {
-            large_pos += dir_norm * t_z;
-            large_dist += t_z;
-            current_voxel.z += step_z;
-        }
-    }
-
-    
-    current_voxel = glm::floor(pos * 2.0f);
-
-    while(true) {
-        if(small_dist > limit * 2) {
+        if(small_dist > limit) {
             small_dist = NAN;
             break;
         }
@@ -2142,41 +1485,28 @@ bool raycast(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool& is_small, f
         }
     }
 
-    if(isnan(large_dist)) {
-        if(isnan(small_dist)) {
-            return false;
-        } else {
-            output = small_coord;
-            is_small = true;
-            return true;
-        }
-    } else if(isnan(small_dist) || large_dist < (small_dist * 0.5)) {
-        output = large_coord;
-        is_small = false;
-        return true;
+    if(isnan(small_dist)) {
+        return false;
     } else {
         output = small_coord;
-        is_small = true;
         return true;
     }
 }
 
-bool raycast_place(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool is_small, float limit) {
+bool raycast_place(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, float limit) {
     glm::vec3 dir_norm = glm::normalize(dir);
     
-    glm::ivec3 current_voxel = glm::floor(pos * 2.0f);
+    glm::ivec3 current_voxel = glm::floor(pos);
     int step_x = (dir.x < 0) ? -1 : 1;
     int step_y = (dir.y < 0) ? -1 : 1;
     int step_z = (dir.z < 0) ? -1 : 1;
 
     float dist = 0.0;
-    glm::ivec3 prev_coord = ((is_small) ? glm::floor(pos * 2.0f) : glm::floor(pos));
-    glm::vec3 start_pos = pos * 2.0f;
-    
-    current_voxel = glm::floor(pos * 2.0f);
+    glm::ivec3 prev_coord = current_voxel;
+    glm::vec3 start_pos = pos;
 
     while(true) {
-        if(dist > limit * 2) {
+        if(dist > limit) {
             dist = NAN;
             break;
         }
@@ -2187,14 +1517,9 @@ bool raycast_place(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool is_sma
             dist = NAN;
             break;
         }
-        uint16_t large_block = get_terrain_voxel(glm::floor(glm::vec3(current_voxel) * 0.5f));
         
-        if(small_block == 0 && large_block == 0) {
-            if(is_small) {
-                prev_coord = current_voxel;
-            } else {
-                prev_coord = glm::floor(glm::vec3(current_voxel) * 0.5f);
-            }
+        if(small_block == 0) {
+            prev_coord = current_voxel;
         } else {
             break;
         }
@@ -2221,30 +1546,8 @@ bool raycast_place(glm::vec3 pos, glm::vec3 dir, glm::ivec3& output, bool is_sma
     if(isnan(dist)) {
         return false;
     } else {
-        if(is_small) {
-            output = prev_coord;
-            return true;
-        } else {
-            bool contains_tile = false;
-            for(int x = 0; x < 2; ++x) {
-                for(int y = 0; y < 2; ++y) {
-                    for(int z = 0; z < 2; ++z) {
-                        if(get_voxel(prev_coord * 2 + glm::ivec3(x, y, z))) {
-                            contains_tile = true;
-                            goto fin;
-                        }
-                    }
-                }
-            }
-            fin:
-
-            if(!contains_tile) {
-                output = prev_coord;
-                return true;
-            } else {
-                return false;
-            }
-        }
+        output = prev_coord;
+        return true;
     }
 }
 
@@ -2323,102 +1626,9 @@ std::vector<std::map<uint8_t, uint8_t>> m = {
 int count = 0;
 
 void Core::init() {
-    /*for(int i = 0; i < 33; ++i) {
-        print_vec({0, 0, i});
-        print_vec({0, 32, i});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({0, i, 0});
-        print_vec({0, i, 32});
-    }
-
-    for(int i = 0; i < 33; ++i) {
-        print_vec({32, 0, i});
-        print_vec({32, 32, i});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({32, i, 0});
-        print_vec({32, i, 32});
-    }
-
-    for(int i = 0; i < 33; ++i) {
-        print_vec({i, 0, 0});
-        print_vec({i, 0, 32});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({0, 0, i});
-        print_vec({32, 0, i});
-    }
-
-    for(int i = 0; i < 33; ++i) {
-        print_vec({i, 32, 0});
-        print_vec({i, 32, 32});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({0, 32, i});
-        print_vec({32, 32, i});
-    }
-
-    for(int i = 0; i < 33; ++i) {
-        print_vec({i, 0, 0});
-        print_vec({i, 32, 0});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({0, i, 0});
-        print_vec({32, i, 0});
-    }
-    
-    for(int i = 0; i < 33; ++i) {
-        print_vec({i, 0, 32});
-        print_vec({i, 32, 32});
-    }
-    for(int i = 0; i < 33; ++i) {
-        print_vec({0, i, 32});
-        print_vec({32, i, 32});
-    }
-
-    std::cout << count;*/
-
-
-
-    /*for(uint16_t i = 0; i <= 0xFF; ++i) {
-        for(int j = 0; j < 7; ++j) {
-            for(auto [vox, edge] : m[j]) {
-                if((i >> vox) & 1) triangle_table[i].push_back(edge);
-            }
-        }
-    }*/
-    /*for(uint16_t i = 0; i <= 0xFF; ++i) {
-        uint8_t j = 0;
-
-        for(uint8_t x = 0; x < 8; ++x) {
-            uint8_t y = x;
-            if(y == 2) y = 4;
-            else if(y == 3) y = 5;
-            else if(y == 4) y = 3;
-            else if(y == 5) y = 2;
-            else if(y == 6) y = 7;
-            else if(y == 7) y = 6;
-
-            if((i >> y) & 1) {
-                j |= (1 << x);
-            }
-        }
-
-        std::cout << "\tstd::vector<uint8_t>{";
-        for(int m = 0; m < triangle_table[j].size(); ++m) {
-            uint16_t v = triangle_table[j][m];
-            std::cout << v;
-
-            if(m != triangle_table[j].size() - 1) std::cout << ", ";
-        }
-        std::cout << "},\n";
-    }*/
-
-
-
     screen_matrix = glm::translate(glm::inverse(glm::scale(identity_matrix_3, glm::vec2(viewport_size / 2))), glm::vec2(-viewport_size / 2));
     gui_framebuffer.init(viewport_size.x, viewport_size.y);
+    terrain_framebuffer.init(viewport_size.x, viewport_size.y);
     space_core.framebuffer.init(viewport_size.x, viewport_size.y);
 
     grid_shader.compile("res/shaders/grid_3d.vs", "res/shaders/grid_3d_xy.fs");
@@ -2429,8 +1639,10 @@ void Core::init() {
     billboard_shader.compile("res/shaders/billbd.vs", "res/shaders/billbd.fs");
     chunk_debug_shader.compile("res/shaders/chunk_debug.vs", "res/shaders/chunk_debug.fs");
     any_shader.compile("res/shaders/any.vs", "res/shaders/any.fs");
+    atmo_shader.compile("res/shaders/atmo.vs", "res/shaders/atmo.fs");
 
     gui_core.init();
+    //space_core.init();
 
     fnfractal->SetSource(fnperlin);
     fnfractal->SetOctaveCount(3);
@@ -2439,7 +1651,6 @@ void Core::init() {
     tex.load("res/tilex.png", true);
     x_tex.load("res/character.png");
 
-    //space_core.init();
 
     chunk_thread = std::thread(
         []() {
@@ -2453,11 +1664,24 @@ struct aabb {
     glm::vec3 size;
 };
 
+struct obb {
+    std::array<glm::vec3, 8> vertices;
+
+    obb(glm::vec3 pos, glm::vec3 size) {
+        for(uint8_t i = 0; i < 8; ++i) {
+            glm::vec3 v = corners[i];
+            vertices[i] = pos + size * v;
+        }
+    }
+
+    obb() = default;
+};
+
 struct hexahedron {
     std::array<glm::vec3, 8> vertices;
 };
 
-bool check_collisions(hexahedron a, hexahedron b, glm::vec3& mtv) {
+bool check_collisions(obb a, hexahedron b) {
     glm::vec3 mtv_norm;
     float mtv_dist = __FLT_MAX__;
 
@@ -2477,14 +1701,9 @@ bool check_collisions(hexahedron a, hexahedron b, glm::vec3& mtv) {
         uint8_t bv = w[1];
         uint8_t cv = w[2];
 
-        uint8_t dv = w[3];
-        uint8_t ev = w[4];
-        uint8_t fv = w[5];
-
         glm::vec3 norm_abc = glm::normalize(glm::cross(vb[bv] - vb[av], vb[cv] - vb[av]));
-        glm::vec3 norm_def = glm::normalize(glm::cross(vb[ev] - vb[dv], vb[fv] - vb[dv]));
 
-        axes.push_back(glm::normalize(norm_abc + norm_def));
+        axes.push_back(norm_abc);
     }
 
     edges = {
@@ -2542,11 +1761,10 @@ bool check_collisions(hexahedron a, hexahedron b, glm::vec3& mtv) {
             }
         }
     }
-    mtv = mtv_norm * mtv_dist;
     return true;
 }
 
-bool check_collisions_obb(hexahedron a, hexahedron b, glm::vec3& mtv) {
+bool check_collisions(obb a, obb b, glm::vec3& mtv) {
     glm::vec3 mtv_norm;
     float mtv_dist = __FLT_MAX__;
 
@@ -2626,185 +1844,5 @@ bool check_collisions_obb(hexahedron a, hexahedron b, glm::vec3& mtv) {
         }
     }
     mtv = mtv_norm * mtv_dist;
-    return true;
-}
-
-bool check_collisions(hexahedron a, hexahedron b, glm::vec3& mtv, glm::vec3& contact) {
-    glm::vec3 mtv_norm;
-    float mtv_dist = __FLT_MAX__;
-
-    std::array<glm::vec3, 8>& va = a.vertices;
-    std::array<glm::vec3, 8>& vb = b.vertices;
-
-    std::vector<glm::vec3> norms = {
-        glm::normalize(va[0] - va[1]),
-        glm::normalize(va[0] - va[2]),
-        glm::normalize(va[0] - va[4])
-    };
-    std::vector<glm::vec3> axes;
-    std::vector<glm::vec3> edges;
-
-    for(auto& w : triangle_table_cube) {
-        uint8_t av = w[0];
-        uint8_t bv = w[1];
-        uint8_t cv = w[2];
-
-        uint8_t dv = w[3];
-        uint8_t ev = w[4];
-        uint8_t fv = w[5];
-
-        glm::vec3 norm_abc = glm::normalize(glm::cross(vb[bv] - vb[av], vb[cv] - vb[av]));
-        glm::vec3 norm_def = glm::normalize(glm::cross(vb[ev] - vb[dv], vb[fv] - vb[dv]));
-
-        axes.push_back(glm::normalize(norm_abc + norm_def));
-    }
-
-    edges = {
-        glm::normalize(vb[0] - vb[1]),
-        glm::normalize(vb[0] - vb[2]),
-        glm::normalize(vb[0] - vb[4]),
-        glm::normalize(vb[1] - vb[3]),
-        glm::normalize(vb[1] - vb[5]),
-        glm::normalize(vb[2] - vb[3]),
-        glm::normalize(vb[2] - vb[6]),
-        glm::normalize(vb[3] - vb[7]),
-        glm::normalize(vb[4] - vb[5]),
-        glm::normalize(vb[4] - vb[6]),
-        glm::normalize(vb[5] - vb[7]),
-        glm::normalize(vb[6] - vb[7])
-    };
-
-    for(glm::vec3 n : norms) {
-        axes.push_back(n);
-        for(glm::vec3 m : edges) {
-            glm::vec3 cross = glm::normalize(glm::cross(n, m));
-            axes.push_back(cross);
-        }
-    }
-    
-    for(glm::vec3 n : axes) {
-        if(!(isnan(n.x) || isinf(n.x))) {
-            std::array<double, 2> minmax_a = {__FLT_MAX__, -__FLT_MAX__};
-            std::array<double, 2> minmax_b = {__FLT_MAX__, -__FLT_MAX__};
-
-            for(glm::vec3 v : va) {
-                double z = dot(v, n);
-
-                if(z < minmax_a[0]) minmax_a[0] = z;
-                if(z > minmax_a[1]) minmax_a[1] = z;
-            }
-
-            for(glm::vec3 v : vb) {
-                double z = dot(v, n);
-
-                if(z < minmax_b[0]) minmax_b[0] = z;
-                if(z > minmax_b[1]) minmax_b[1] = z;
-            }
-
-            if(minmax_a[0] < minmax_b[1] && minmax_a[1] > minmax_b[0]) {
-                float dist_0 = minmax_b[1] - minmax_a[0];
-                float dist_1 = minmax_b[0] - minmax_a[1];
-                float new_mtv_dist = (abs(dist_0) < abs(dist_1)) ? dist_0 : dist_1;
-                if(abs(mtv_dist) > abs(new_mtv_dist)) {
-                    mtv_dist = new_mtv_dist;
-                    mtv_norm = n;
-                }
-            } else {
-                return false;
-            }
-        }
-    }
-    mtv = mtv_norm * mtv_dist;
-    return true;
-}
-
-bool check_collisions(aabb a, hexahedron b) {
-    glm::vec3 mtv_norm;
-    float mtv_dist = __FLT_MAX__;
-
-    std::vector<glm::vec3> va;
-    std::array<glm::vec3, 8>& vb = b.vertices;
-
-    for(int i = 0; i < 8; ++i) {
-        glm::vec3 iv = {i & 1, (i >> 1) & 1, i >> 2};
-        va.push_back(a.pos + a.size * iv);
-    }
-
-    std::vector<glm::vec3> norms = {
-        {1, 0, 0},
-        {0, 1, 0},
-        {0, 0, 1}
-    };
-    std::vector<glm::vec3> axes;
-    std::vector<glm::vec3> edges;
-
-    for(auto& w : triangle_table_cube) {
-        uint8_t av = w[0];
-        uint8_t bv = w[1];
-        uint8_t cv = w[2];
-
-        glm::vec3 norm_abc = glm::normalize(glm::cross(vb[bv] - vb[av], vb[cv] - vb[av]));
-
-        axes.push_back(norm_abc);
-    }
-
-    edges = {
-        glm::normalize(vb[0] - vb[1]),
-        glm::normalize(vb[0] - vb[2]),
-        glm::normalize(vb[0] - vb[4]),
-        glm::normalize(vb[1] - vb[3]),
-        glm::normalize(vb[1] - vb[5]),
-        glm::normalize(vb[2] - vb[3]),
-        glm::normalize(vb[2] - vb[6]),
-        glm::normalize(vb[3] - vb[7]),
-        glm::normalize(vb[4] - vb[5]),
-        glm::normalize(vb[4] - vb[6]),
-        glm::normalize(vb[5] - vb[7]),
-        glm::normalize(vb[6] - vb[7])
-    };
-
-    for(glm::vec3 n : norms) {
-        axes.push_back(n);
-        for(glm::vec3 m : edges) {
-            glm::vec3 cross = glm::normalize(glm::cross(n, m));
-            axes.push_back(cross);
-        }
-    }
-
-    std::vector<float> collector;
-    
-    for(glm::vec3 n : axes) {
-        if(!(isnan(n.x) || isinf(n.x))) {
-            std::array<float, 2> minmax_a = {__FLT_MAX__, -__FLT_MAX__};
-            std::array<float, 2> minmax_b = {__FLT_MAX__, -__FLT_MAX__};
-
-            for(glm::vec3 v : va) {
-                float z = dot(v, n);
-
-                if(z < minmax_a[0]) minmax_a[0] = z;
-                if(z > minmax_a[1]) minmax_a[1] = z;
-            }
-
-            for(glm::vec3 v : vb) {
-                float z = dot(v, n);
-                collector.push_back(z);
-
-                if(z < minmax_b[0]) minmax_b[0] = z;
-                if(z > minmax_b[1]) minmax_b[1] = z;
-            }
-
-            if(!(minmax_a[0] < minmax_b[1] && minmax_a[1] > minmax_b[0])) {
-                /*std::cout << n.x << " " << n.y << " " << n.z << "\n";
-                std::cout << minmax_a[0] << " " << minmax_a[1] << " " << minmax_b[0] << " " << minmax_b[1] << "\n";
-
-                for(float f : collector) {
-                    std::cout << f << " ";
-                }
-                std::cout << "\n\n";*/
-
-                return false;
-            }
-        }
-    }
     return true;
 }

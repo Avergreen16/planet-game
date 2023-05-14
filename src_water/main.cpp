@@ -381,24 +381,24 @@ void calculate(double delta_time) {
         }
     }
 
-    /*if(core.key_map[GLFW_KEY_E]) {
+    if(core.key_map[GLFW_KEY_E]) {
         core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * (delta_time / 3)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
     }
     if(core.key_map[GLFW_KEY_Q]) {
         core.up_dir = glm::rotate(identity_matrix_4, float(2 * M_PI * -(delta_time / 3)), core.view_dir) * glm::vec4(core.up_dir, 1.0);
-    }*/
+    }
     if(core.key_map[GLFW_KEY_W]) {
-        core.view_pos += glm::vec3(glm::normalize(core.view_dir.xy()) * float(core.move_speed * delta_time), 0.0);
+        core.view_pos += glm::vec3(glm::normalize(core.view_dir) * float(core.move_speed * delta_time));
     }
     if(core.key_map[GLFW_KEY_S]) {
-        core.view_pos -= glm::vec3(glm::normalize(core.view_dir.xy()) * float(core.move_speed * delta_time), 0.0);
+        core.view_pos -= glm::vec3(glm::normalize(core.view_dir) * float(core.move_speed * delta_time));
     }
     glm::vec3 sideways = glm::normalize(glm::cross(core.view_dir, core.up_dir));
     if(core.key_map[GLFW_KEY_D]) {
-        core.view_pos += glm::vec3(glm::normalize(sideways.xy()) * float(core.move_speed * delta_time), 0.0);
+        core.view_pos += glm::vec3(glm::normalize(sideways) * float(core.move_speed * delta_time));
     }
     if(core.key_map[GLFW_KEY_A]) {
-        core.view_pos -= glm::vec3(glm::normalize(sideways.xy()) * float(core.move_speed * delta_time), 0.0);
+        core.view_pos -= glm::vec3(glm::normalize(sideways) * float(core.move_speed * delta_time));
     }
     if(core.key_map[GLFW_KEY_LEFT_SHIFT]) {
         core.view_pos -= core.up_dir * float(core.move_speed * delta_time);
@@ -652,8 +652,8 @@ void Core::game_loop() {
 
     
     const float fov = 2 * M_PI * 0x0.4p0;
-    float near_plane = 0x0.18p0f;
-    float far_plane = 10000.0f;
+    float near_plane = 0.02f;
+    float far_plane = 4000.0f;
     float aspect = float(screen_size.x) / screen_size.y;
 
     glm::mat4 view = glm::lookAt(view_pos, view_pos + view_dir, up_dir);
@@ -679,7 +679,6 @@ void Core::game_loop() {
     space_view = (glm::lookAt(glm::vec3(0, 0, 0), view_dir, up_dir) * glm::inverse(glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, 0, 1)))) * space_view;
 
     space_core.framebuffer.bind();
-    space_core.draw(view, space_projection);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -688,6 +687,8 @@ void Core::game_loop() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     screen_shader.use();
     glDrawArrays(GL_TRIANGLES, 0, 6);*/
+    
+    space_core.draw(view, projection);
 
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -815,16 +816,20 @@ void Core::game_loop() {
     glDrawArrays(GL_TRIANGLES, 0, 6);*/
 
     glDisable(GL_DEPTH_TEST);
-
+    
     atmo_shader.use();
     terrain_framebuffer.depth_tex.bind(0);
     terrain_framebuffer.color_tex[0].bind(1);
     glUniformMatrix4fv(0, 1, false, &projection[0][0]);
     glUniformMatrix4fv(1, 1, false, &view[0][0]);
-    glUniform3f(2, 0, 0, 0);
-    glUniform1f(3, 128);
+    glUniform3fv(2, 1, &space_core.planets[0].position[0]);
+    glUniform1f(3, 1.0 / 0.9);
     glUniform3fv(4, 1, &view_pos[0]);
     glUniform2f(5, viewport_size.x, viewport_size.y);
+
+    glm::vec3 sun_dir = glm::normalize(space_core.planets[1].position);
+
+    glUniform3fv(6, 1, &sun_dir[0]);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
     gui_framebuffer.bind();

@@ -31,7 +31,7 @@ flat out vec3 center_pos;
 flat out mat4 inv_proj;
 
 void main() {
-    vec3 v = vertices[indices[gl_VertexID]] * radius + pos;
+    vec3 v = vertices[indices[gl_VertexID]] * radius * 1.5 + pos;
 
     frag_pos = v;
     r = radius;

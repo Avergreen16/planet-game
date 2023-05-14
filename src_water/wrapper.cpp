@@ -152,13 +152,9 @@ struct Shader {
         std::string fragment_shader_src = get_text_from_file(fragment_shader_path);
         const char* v_ptr = vertex_shader_src.data();
         const char* f_ptr = fragment_shader_src.data();
-        std::cout << "x";
         GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-        std::cout << "x";
         glShaderSource(vertex_shader, 1, &v_ptr, 0);
-        std::cout << "x";
         glCompileShader(vertex_shader);
-        std::cout << "x";
         
         // check if vertex shader compiled correctly
         GLint compile_check;

@@ -371,8 +371,8 @@ struct Space_core {
     glm::vec3 light_pos;
     double G = 0.0000000005;
 
-    bool sim_active = false;
-    double sim_speed = 1;
+    bool sim_active = true;
+    double sim_speed = 500;
 
     std::time_t start_time;
     std::time_t t;
@@ -404,6 +404,8 @@ struct Space_core {
                     p.acceleration = {0, 0, 0};
                     p.position += p.velocity * delta_time * sim_speed;
                 }
+
+                light_pos = glm::normalize(planets[1].position);
             }
         }
     }
@@ -416,7 +418,7 @@ struct Space_core {
     }
 
     void init() {
-        for(int i = 0; i < 6; ++i) {
+        for(int i = 0; i < 7; ++i) {
             textures.push_back(Texture());
         }
         textures[0].load("res/planet_surfaces/gas_giant.png");
@@ -426,15 +428,14 @@ struct Space_core {
         textures[4].load("res/planet_surfaces/icy.png");
         textures[5].load("res/planet_surfaces/dusty.png");
         textures[6].load("res/planet_surfaces/barren.png");
-        std::cout << "check";
 
         planet_shader.compile("res/shaders/planet.vs", "res/shaders/planet.fs");
         planet_shader_solid.compile("res/shaders/planet_solid.vs", "res/shaders/planet_solid.fs");
-        std::cout << "check";
 
-        planets.push_back(Planet(glm::vec3{0, 0, 0}, 0x20, 0x1000, 87, -1, true, {1.0, 0.8, 0.5}, true));
-        planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0xE0, 0x5.0p0f, 0xF.0p0f, 0x80, 1));
-        planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x200, 0x1.0p0f, 0x1.0p0f, 0x80, 2));
+        planets.push_back(Planet(glm::vec3{0, 0, 0}, 1, 0x1, 870, 2));
+        planets.push_back(Planet(glm::vec3{2048, 0, 0}, 48, 0.0, 87, -1, true, {1.0, 0.8, 0.5}, true));
+        //planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0xE0, 0x5.0p0f, 0xF.0p0f, 0x80, 1));
+        /*planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x200, 0x1.0p0f, 0x1.0p0f, 0x80, 2));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x7, 0x0.5p0f, 0x0.2p0f, 0x80, 6));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x300, 0x0.Cp0f, 0x0.8p0f, 0x80, 5));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x460, 0x1.Cp0f, 0x2.8p0f, 0x80, 4));
@@ -444,10 +445,10 @@ struct Space_core {
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x38, 0x0.38p0f, 0x0.1p0f, 0x80, 4));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x6C0, 0x3.8p0f, 0xC.0p0f, 0x80, 1));
         planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0xC, 0x0.6p0f, 0x0.2p0f, 0x80, 4));
-        planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x28, 0x0.28p0f, 0x0.08p0f, 0x80, 4));
-        std::cout << "check";
-
+        planets.push_back(Planet(glm::normalize(glm::vec3{rand_vec(), 0.0}) * (float)0x28, 0x0.28p0f, 0x0.08p0f, 0x80, 4));*/
+        
         orbit(planets[1], planets[0]);
+        /*orbit(planets[1], planets[0]);
         orbit(planets[2], planets[0]);
         orbit(planets[3], planets[2]);
         orbit(planets[4], planets[0]);
@@ -458,13 +459,12 @@ struct Space_core {
         orbit(planets[9], planets[6]);
         orbit(planets[10], planets[0]);
         orbit(planets[11], planets[10]);
-        orbit(planets[12], planets[10]);
-        std::cout << "check";
+        orbit(planets[12], planets[10]);*/
 
-        light_pos = planets[0].position;
+        light_pos = glm::vec3(1, 1, 0) * 300.0f;
         
         for(Planet& p : planets) {
-            auto v = gen_sphere(p.radius, 8);
+            auto v = gen_sphere(p.radius, 24);
 
             p.buffer.init();
             p.buffer.set_data(v.data(), v.size(), sizeof(v[0]));
@@ -472,20 +472,18 @@ struct Space_core {
             p.buffer.set_attrib(1, 3, sizeof(float) * 8, sizeof(float) * 3);
             p.buffer.set_attrib(2, 2, sizeof(float) * 8, sizeof(float) * 6);
         }
-        std::cout << "check";
 
         thread = std::thread(
             [this]() {
                 loop();
             }
         );
-        std::cout << "check";
     }
 
     void draw(glm::mat4 view_mat, glm::mat4 proj_mat);
 };
 
-const glm::ivec3 region = {16, 16, 16};
+const glm::ivec3 region = {0, 0, 0};
 
 const int factor = 32;
 const float freq = 1.0 / factor;
@@ -679,10 +677,14 @@ struct Core {
             glm::mat4 rotate_matrix_x = glm::rotate(identity_matrix_4, float(2 * M_PI * 0x0.004p0 * -difference.x), up_dir);
             glm::mat4 rotate_matrix_y = glm::rotate(identity_matrix_4, float(2 * M_PI * 0x0.004p0 * difference.y), glm::cross(view_dir, up_dir));
             glm::vec3 new_view_dir = (rotate_matrix_y * glm::vec4(view_dir, 1.0));
+            glm::vec3 new_up_dir = rotate_matrix_y * glm::vec4(up_dir, 1.0);
 
-            if((new_view_dir.z < 0 && view_dir.z < 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0))) || (new_view_dir.z > 0 && view_dir.z > 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0)))) {
-                view_dir = rotate_matrix_x * glm::vec4(view_dir, 1.0);
-            } else view_dir = rotate_matrix_x * glm::vec4(new_view_dir, 1.0);
+            //if((new_view_dir.z < 0 && view_dir.z < 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0))) || (new_view_dir.z > 0 && view_dir.z > 0 && ((new_view_dir.x < 0) != (view_dir.x < 0) || (new_view_dir.y < 0) != (view_dir.y < 0)))) {
+            //    view_dir = rotate_matrix_x * glm::vec4(view_dir, 1.0);
+            //} else {
+                view_dir = rotate_matrix_x * glm::vec4(new_view_dir, 1.0);
+                up_dir = new_up_dir;
+            //}
         }
 
         cursor_pos = new_cursor_pos;
@@ -808,7 +810,7 @@ void Chunk::generate() {
 
                 uint16_t vox = 0;
 
-                if(density > 0.0) {
+                /*if(density > 0.0) {
                     if(density < 8) {
                         if(heightmap[z + 1][y][x] <= 0.0) {
                             vox = 2;
@@ -818,7 +820,7 @@ void Chunk::generate() {
                     } else {
                         vox = 3;
                     }
-                }
+                }*/
                 
                 /*switch(biome[y][x]) {
                     case 1: { // mountain
@@ -1642,7 +1644,7 @@ void Core::init() {
     atmo_shader.compile("res/shaders/atmo.vs", "res/shaders/atmo.fs");
 
     gui_core.init();
-    //space_core.init();
+    space_core.init();
 
     fnfractal->SetSource(fnperlin);
     fnfractal->SetOctaveCount(3);
